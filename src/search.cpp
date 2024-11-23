@@ -783,7 +783,7 @@ Value Search::Worker::search(
     {
         value = qsearch<NonPV>(pos, ss, alpha - 1, alpha);
         if (value < alpha && std::abs(value) < VALUE_TB_WIN_IN_MAX_PLY)
-            return value;
+            return value + (ttCapture ? 0 : (alpha - value) / 3);
     }
 
     // Step 8. Futility pruning: child node (~40 Elo)
