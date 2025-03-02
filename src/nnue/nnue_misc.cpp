@@ -189,5 +189,29 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
     return ss.str();
 }
 
+void write_difference(Features::Simplified_Threats::IndexList a1, Features::Simplified_Threats::IndexList b1, Features::Simplified_Threats::IndexList a2, Features::Simplified_Threats::IndexList b2) {
+    unsigned long long a = 0;
+    unsigned long long b = 0;
+    while (a < a1.size() && b < b1.size()) {
+        if (a1[a] < b1[b]) {
+            a2.push_back(a1[a]);
+            a++;
+        }
+        else if (b1[b] < a1[a]) {
+            b2.push_back(b1[b]);
+            b++;
+        }
+        else {
+            a++;
+            b++;
+        }
+    }
+    while (a < a1.size()) {
+        a2.push_back(a1[a]);
+    }
+    while (b < b1.size()) {
+        b2.push_back(b1[b]);
+    }
+}
 
 }  // namespace Stockfish::Eval::NNUE

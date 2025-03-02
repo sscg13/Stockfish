@@ -69,8 +69,7 @@ IndexType Simplified_Threats::make_index(Piece attkr, Square from, Square to, Pi
                      + threatoffsets[attkr][from] + popcount((square_bb(to)-1) & attacks));
 }
 
-// Get a list of indices for active features
-// For White, generates threats in ascending order
+// Get a list of indices for active features in ascending order
 template<Color Perspective>
 void Simplified_Threats::append_active_threats(const Position& pos, IndexList& active) {
     Square ksq = pos.square<KING>(Perspective);

@@ -26,6 +26,7 @@
 #include <iosfwd>
 
 #include "features/half_ka_v2_hm.h"
+#include "features/simplified_threats.h"
 #include "layers/affine_transform.h"
 #include "layers/affine_transform_sparse_input.h"
 #include "layers/clipped_relu.h"
