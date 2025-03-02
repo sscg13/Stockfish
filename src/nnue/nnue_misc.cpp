@@ -208,9 +208,11 @@ void write_difference(Features::Simplified_Threats::IndexList& a1, Features::Sim
     }
     while (a < a1.size()) {
         a2.push_back(a1[a]);
+        a++;
     }
     while (b < b1.size()) {
         b2.push_back(b1[b]);
+        b++;
     }
 }
 
