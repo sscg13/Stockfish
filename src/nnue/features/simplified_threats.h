@@ -108,7 +108,7 @@ class Simplified_Threats {
 
     // Get a list of indices for active features
     template<Color Perspective>
-    void append_active_indices(const Position& pos, IndexList& active);
+    void append_active_threats(const Position& pos, IndexList& active);
     /*
     // Get a list of indices for recently changed features
     template<Color Perspective>

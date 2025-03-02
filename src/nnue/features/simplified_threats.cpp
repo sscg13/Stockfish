@@ -70,29 +70,40 @@ IndexType Simplified_Threats::make_index(Piece attkr, Square from, Square to, Pi
 }
 
 // Get a list of indices for active features
+// For White, generates threats in ascending order
 template<Color Perspective>
-void Simplified_Threats::append_active_indices(const Position& pos, IndexList& active) {
-    Square   ksq = pos.square<KING>(Perspective);
-    Bitboard bb  = pos.pieces();
-    while (bb)
-    {
-        Square from = pop_lsb(bb);
-        Piece attkr = pos.piece_on(from);
-        PieceType attkrtype = type_of(attkr);
-        Color attkrcolor = color_of(attkr);
-        active.push_back(make_index<Perspective>(attkr, from, from, attkr, ksq));
-        Bitboard attacks = ((attkrtype == PAWN) ? pawn_attacks_bb(attkrcolor, from) : attacks_bb(attkrtype, from, pos.pieces())) & pos.pieces();
-        while (attacks) {
-            Square to = pop_lsb(attacks);
-            Piece attkd = pos.piece_on(to);
-            active.push_back(make_index<Perspective>(attkr, from, to, attkd, ksq));
+void Simplified_Threats::append_active_threats(const Position& pos, IndexList& active) {
+    Square ksq = pos.square<KING>(Perspective);
+    Color order[2][2] = {{WHITE, BLACK}, {BLACK, WHITE}};
+    std::vector<int> pieces;
+    for (int i = WHITE; i <= BLACK; i++) {
+        for (int j = PAWN; j <= KING; j++) {
+            Color c = order[Perspective][i];
+            PieceType pt = PieceType(j);
+            Piece attkr = make_piece(c, pt);
+            Bitboard bb  = pos.pieces(c, pt);
+            while (bb)
+            {
+                Square from = pop_lsb(bb);
+                Bitboard attacks = ((pt == PAWN) ? pawn_attacks_bb(c, from) : attacks_bb(pt, from, pos.pieces())) & pos.pieces();
+                while (attacks) {
+                    Square to = pop_lsb(attacks);
+                    Piece attkd = pos.piece_on(to);
+                    pieces.push_back(make_index<Perspective>(attkr, from, to, attkd, ksq));
+                }
+            }
+            std::sort(pieces.begin(), pieces.end());
+            for (auto threat : pieces) {
+                active.push_back(threat);
+            }
+            pieces.clear();
         }
     }
 }
 
 // Explicit template instantiations
-template void Simplified_Threats::append_active_indices<WHITE>(const Position& pos, IndexList& active);
-template void Simplified_Threats::append_active_indices<BLACK>(const Position& pos, IndexList& active);
+template void Simplified_Threats::append_active_threats<WHITE>(const Position& pos, IndexList& active);
+template void Simplified_Threats::append_active_threats<BLACK>(const Position& pos, IndexList& active);
 template IndexType Simplified_Threats::make_index<WHITE>(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
 template IndexType Simplified_Threats::make_index<BLACK>(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
 /*
