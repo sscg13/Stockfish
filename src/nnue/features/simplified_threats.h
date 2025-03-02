@@ -100,15 +100,15 @@ class Simplified_Threats {
     static constexpr IndexType MaxActiveDimensions = 128;
     using IndexList                                = ValueList<IndexType, MaxActiveDimensions>;
 
-    static IndexType threatoffsets[PIECE_NB][SQUARE_NB+2];
-    static void init_threat_offsets();
+    IndexType threatoffsets[PIECE_NB][SQUARE_NB+2];
+    void init_threat_offsets();
     // Index of a feature for a given king position and another piece on some square
     template<Color Perspective>
-    static IndexType make_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
+    IndexType make_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
 
     // Get a list of indices for active features
     template<Color Perspective>
-    static void append_active_indices(const Position& pos, IndexList& active);
+    void append_active_indices(const Position& pos, IndexList& active);
     /*
     // Get a list of indices for recently changed features
     template<Color Perspective>

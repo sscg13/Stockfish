@@ -19,7 +19,6 @@
 //Definition of input features Simplified_Threats of NNUE evaluation function
 
 #include "simplified_threats.h"
-
 #include "../../bitboard.h"
 #include "../../position.h"
 #include "../../types.h"
@@ -32,32 +31,30 @@ void Simplified_Threats::init_threat_offsets() {
     PieceType piecetbl[PIECE_NB] = {NO_PIECE_TYPE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, NO_PIECE_TYPE,
     NO_PIECE_TYPE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, NO_PIECE_TYPE};
     for (int piece = 0; piece < 16; piece++) {
-        if (piecetbl[piece] == NO_PIECE_TYPE) {
-            continue;
-        }
-        threatoffsets[piece][65] = pieceoffset;
-        int squareoffset = 0;
-        for (int from = SQ_A1; from <= SQ_H8; from++) {
-            Square sq = static_cast<Square>(from);
-            threatoffsets[piece][from-SQ_A1] = squareoffset;
-            if (piecetbl[piece] != PAWN) {
-                Bitboard attacks = attacks_bb(piecetbl[piece], sq, 0ULL);
-                squareoffset += popcount(attacks);
+        if (piecetbl[piece] != NO_PIECE_TYPE) {
+            threatoffsets[piece][65] = pieceoffset;
+            int squareoffset = 0;
+            for (int from = SQ_A1; from <= SQ_H8; from++) {
+                threatoffsets[piece][from] = squareoffset;
+                if (piecetbl[piece] != PAWN) {
+                    Bitboard attacks = attacks_bb(piecetbl[piece], Square(from), 0ULL);
+                    squareoffset += popcount(attacks);
+                }
+                else if (from >= SQ_A2 && from <= SQ_H7) {
+                    Bitboard attacks = pawn_attacks_bb(Color(piece/8), Square(from));
+                    squareoffset += popcount(attacks);
+                }
             }
-            else if (from >= SQ_A2 && from <= SQ_H7) {
-                Bitboard attacks = pawn_attacks_bb(static_cast<Color>(piece/8), sq);
-                squareoffset += popcount(attacks);
-            }
+            threatoffsets[piece][64] = squareoffset;
+            pieceoffset += 2*squareoffset;
         }
-        threatoffsets[piece][64] = squareoffset;
-        pieceoffset += 2*squareoffset;
     }
 }
 
 // Index of a feature for a given king position and another piece on some square
 template<Color Perspective>
-inline IndexType Simplified_Threats::make_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq) {
-    bool enemy = (type_of(attkr) == type_of(attkd));
+IndexType Simplified_Threats::make_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq) {
+    bool enemy = (color_of(attkr) != color_of(attkd));
     from = (Square)(int(from) ^ OrientTBL[Perspective][ksq]);
     to = (Square)(int(to) ^ OrientTBL[Perspective][ksq]);
     if (Perspective == BLACK) {
@@ -65,11 +62,11 @@ inline IndexType Simplified_Threats::make_index(Piece attkr, Square from, Square
         attkd = ~attkd;
     }
     if (from == to) {
-        return IndexType(PieceSquareIndex[attkr]+from-SQ_A1);
+        return IndexType(PieceSquareIndex[attkr]+from);
     }
     Bitboard attacks = (type_of(attkr) == PAWN) ? pawn_attacks_bb(color_of(attkr), from) : attacks_bb(type_of(attkr), from, 0ULL);
     return IndexType(768 + threatoffsets[attkr][65] + enemy*threatoffsets[attkr][64]
-                     + threatoffsets[attkr][from-SQ_A1] + popcount((square_bb(to)-1) & attacks));
+                     + threatoffsets[attkr][from] + popcount((square_bb(to)-1) & attacks));
 }
 
 // Get a list of indices for active features
