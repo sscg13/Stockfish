@@ -27,10 +27,7 @@
 
 #include "features/half_ka_v2_hm.h"
 #include "features/simplified_threats.h"
-#include "layers/affine_transform.h"
-#include "layers/affine_transform_sparse_input.h"
-#include "layers/clipped_relu.h"
-#include "layers/sqr_clipped_relu.h"
+#include "layers/screlu_affine.h"
 #include "nnue_common.h"
 
 namespace Stockfish::Eval::NNUE {
@@ -41,12 +38,12 @@ using FeatureSet = Features::Simplified_Threats;
 // Number of input feature dimensions after conversion
 constexpr IndexType TransformedFeatureDimensionsBig = 256;
 
-constexpr IndexType LayerStacks = 8;
+constexpr IndexType LayerStacks = 1;
 
 template<IndexType L1>
 struct NetworkArchitecture {
     static constexpr IndexType TransformedFeatureDimensions = L1;
-    Layers::SCReLUAffineTransform<TransformedFeatureDimensions * 2, 1> fc_0;
+    Layers::SCReLUAffine<TransformedFeatureDimensions * 2> fc_0;
 
     // Read network parameters
     bool read_parameters(std::istream& stream) {

@@ -29,7 +29,6 @@
 namespace Stockfish::Eval::NNUE {
 
 using BiasType       = std::int16_t;
-using PSQTWeightType = std::int32_t;
 using IndexType      = std::uint32_t;
 
 // Class that holds the result of affine transformation of input features
@@ -53,32 +52,31 @@ struct AccumulatorCaches {
         clear(networks);
     }
 
+    //hack this definition, make it only have a single 
     template<IndexType Size>
     struct alignas(CacheLineSize) Cache {
 
         struct alignas(CacheLineSize) Entry {
-            BiasType       accumulation[Size];
-            Bitboard       byColorBB[COLOR_NB];
-            Bitboard       byTypeBB[PIECE_TYPE_NB];
+            BiasType              accumulation[Size];
+            Bitboard              byColorBB[COLOR_NB];
+            Bitboard              byTypeBB[PIECE_TYPE_NB];
+            FeatureSet::IndexList threats;
 
             // To initialize a refresh entry, we set all its bitboards empty,
             // so we put the biases in the accumulation, without any weights on top
+            // and clear all active threats
             void clear(const BiasType* biases) {
-
                 std::memcpy(accumulation, biases, sizeof(accumulation));
+                threats.clear();
             }
         };
 
         template<typename Network>
         void clear(const Network& network) {
-            for (auto& entries1D : entries)
-                for (auto& entry : entries1D)
-                    entry.clear(network.featureTransformer->biases);
+            data.clear(network.featureTransformer->biases);
         }
 
-        std::array<Entry, COLOR_NB>& operator[](Square sq) { return entries[sq]; }
-
-        std::array<std::array<Entry, COLOR_NB>, SQUARE_NB> entries;
+        Entry data;
     };
 
     template<typename Networks>
