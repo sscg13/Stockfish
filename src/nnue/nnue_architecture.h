@@ -37,43 +37,24 @@ using FeatureSet = Features::Simplified_Threats;
 
 // Number of input feature dimensions after conversion
 constexpr IndexType TransformedFeatureDimensionsBig = 256;
-
 constexpr IndexType LayerStacks = 1;
 
 template<IndexType L1>
 struct NetworkArchitecture {
     static constexpr IndexType TransformedFeatureDimensions = L1;
-    Layers::SCReLUAffine<TransformedFeatureDimensions * 2> fc_0;
+    Layers::SCReLUAffine<TransformedFeatureDimensions * 2> output;
 
+    std::int32_t evaluate(const TransformedFeatureType* transformedFeatures, const int bucket) {
+      return output.evaluate(transformedFeatures, bucket);
+    }
     // Read network parameters
     bool read_parameters(std::istream& stream) {
-        return fc_0.read_parameters(stream);
+        return output.read_parameters(stream);
     }
 
     // Write network parameters
     bool write_parameters(std::ostream& stream) const {
-        return fc_0.write_parameters(stream);
-    }
-
-    std::int32_t propagate(const TransformedFeatureType* transformedFeatures) {
-        struct alignas(CacheLineSize) Buffer {
-            alignas(CacheLineSize) typename decltype(fc_0)::OutputBuffer fc_0_out;
-
-            Buffer() { std::memset(this, 0, sizeof(*this)); }
-        };
-
-#if defined(__clang__) && (__APPLE__)
-        // workaround for a bug reported with xcode 12
-        static thread_local auto tlsBuffer = std::make_unique<Buffer>();
-        // Access TLS only once, cache result.
-        Buffer& buffer = *tlsBuffer;
-#else
-        alignas(CacheLineSize) static thread_local Buffer buffer;
-#endif
-        fc_0.propagate(transformedFeatures, buffer.fc_0_out);
-        std::int32_t outputValue = buffer.fc_0_out[0];
-
-        return outputValue;
+        return output.write_parameters(stream);
     }
 };
 

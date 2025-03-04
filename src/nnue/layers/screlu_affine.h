@@ -38,11 +38,11 @@ class SCReLUAffine {
     using OutputType = std::int32_t;
 
     // Number of input/output dimensions
-    static constexpr IndexType InputDimensions  = InDims;
+    static constexpr IndexType InputDimensions = InDims;
     static constexpr IndexType OutputBuckets = 8;
     static constexpr IndexType OutputDimensions = 1;
 
-    using OutputBuffer = OutputType[OutputDimensions];
+    OutputType output;
 
     // Read network parameters
     bool read_parameters(std::istream& stream) {
@@ -59,13 +59,14 @@ class SCReLUAffine {
     }
 
     // Forward propagation
-    void propagate(const InputType* input, IndexType bucket, OutputType* output) const {
+    OutputType evaluate(const InputType* input, IndexType bucket) const {
         constexpr IndexType Start = 0;
-        output[0] = 255*(int32_t)biases[bucket];
+        output = 255*(int32_t)biases[bucket];
         for (IndexType i = Start; i < InputDimensions; ++i)
         {
-            output[0] += int32_t((input[i])*(input[i]))*weights[bucket*InputDimensions+i];
+            output += int32_t((input[i])*(input[i]))*weights[bucket*InputDimensions+i];
         }
+        return output / 255;
     }
 
     

@@ -41,167 +41,8 @@ namespace Stockfish::Eval::NNUE {
 using BiasType       = std::int16_t;
 using WeightType     = std::int16_t;
 
-enum IncUpdateDirection {
-    FORWARD,
-    BACKWARDS
-};
-
-// If vector instructions are enabled, we update and refresh the
-// accumulator tile by tile such that each tile fits in the CPU's
-// vector registers.
-#define VECTOR
-
-#ifdef USE_AVX512
-using vec_t      = __m512i;
-using psqt_vec_t = __m256i;
-    #define vec_load(a) _mm512_load_si512(a)
-    #define vec_store(a, b) _mm512_store_si512(a, b)
-    #define vec_add_16(a, b) _mm512_add_epi16(a, b)
-    #define vec_sub_16(a, b) _mm512_sub_epi16(a, b)
-    #define vec_mulhi_16(a, b) _mm512_mulhi_epi16(a, b)
-    #define vec_zero() _mm512_setzero_epi32()
-    #define vec_set_16(a) _mm512_set1_epi16(a)
-    #define vec_max_16(a, b) _mm512_max_epi16(a, b)
-    #define vec_min_16(a, b) _mm512_min_epi16(a, b)
-    #define vec_slli_16(a, b) _mm512_slli_epi16(a, b)
-    // Inverse permuted at load time
-    #define vec_packus_16(a, b) _mm512_packus_epi16(a, b)
-    #define vec_load_psqt(a) _mm256_load_si256(a)
-    #define vec_store_psqt(a, b) _mm256_store_si256(a, b)
-    #define vec_add_psqt_32(a, b) _mm256_add_epi32(a, b)
-    #define vec_sub_psqt_32(a, b) _mm256_sub_epi32(a, b)
-    #define vec_zero_psqt() _mm256_setzero_si256()
-    #define NumRegistersSIMD 16
-    #define MaxChunkSize 64
-
-#elif USE_AVX2
-using vec_t      = __m256i;
-using psqt_vec_t = __m256i;
-    #define vec_load(a) _mm256_load_si256(a)
-    #define vec_store(a, b) _mm256_store_si256(a, b)
-    #define vec_add_16(a, b) _mm256_add_epi16(a, b)
-    #define vec_sub_16(a, b) _mm256_sub_epi16(a, b)
-    #define vec_mulhi_16(a, b) _mm256_mulhi_epi16(a, b)
-    #define vec_zero() _mm256_setzero_si256()
-    #define vec_set_16(a) _mm256_set1_epi16(a)
-    #define vec_max_16(a, b) _mm256_max_epi16(a, b)
-    #define vec_min_16(a, b) _mm256_min_epi16(a, b)
-    #define vec_slli_16(a, b) _mm256_slli_epi16(a, b)
-    // Inverse permuted at load time
-    #define vec_packus_16(a, b) _mm256_packus_epi16(a, b)
-    #define vec_load_psqt(a) _mm256_load_si256(a)
-    #define vec_store_psqt(a, b) _mm256_store_si256(a, b)
-    #define vec_add_psqt_32(a, b) _mm256_add_epi32(a, b)
-    #define vec_sub_psqt_32(a, b) _mm256_sub_epi32(a, b)
-    #define vec_zero_psqt() _mm256_setzero_si256()
-    #define NumRegistersSIMD 16
-    #define MaxChunkSize 32
-
-#elif USE_SSE2
-using vec_t      = __m128i;
-using psqt_vec_t = __m128i;
-    #define vec_load(a) (*(a))
-    #define vec_store(a, b) *(a) = (b)
-    #define vec_add_16(a, b) _mm_add_epi16(a, b)
-    #define vec_sub_16(a, b) _mm_sub_epi16(a, b)
-    #define vec_mulhi_16(a, b) _mm_mulhi_epi16(a, b)
-    #define vec_zero() _mm_setzero_si128()
-    #define vec_set_16(a) _mm_set1_epi16(a)
-    #define vec_max_16(a, b) _mm_max_epi16(a, b)
-    #define vec_min_16(a, b) _mm_min_epi16(a, b)
-    #define vec_slli_16(a, b) _mm_slli_epi16(a, b)
-    #define vec_packus_16(a, b) _mm_packus_epi16(a, b)
-    #define vec_load_psqt(a) (*(a))
-    #define vec_store_psqt(a, b) *(a) = (b)
-    #define vec_add_psqt_32(a, b) _mm_add_epi32(a, b)
-    #define vec_sub_psqt_32(a, b) _mm_sub_epi32(a, b)
-    #define vec_zero_psqt() _mm_setzero_si128()
-    #define NumRegistersSIMD (Is64Bit ? 16 : 8)
-    #define MaxChunkSize 16
-
-#elif USE_NEON
-using vec_t      = int16x8_t;
-using psqt_vec_t = int32x4_t;
-    #define vec_load(a) (*(a))
-    #define vec_store(a, b) *(a) = (b)
-    #define vec_add_16(a, b) vaddq_s16(a, b)
-    #define vec_sub_16(a, b) vsubq_s16(a, b)
-    #define vec_mulhi_16(a, b) vqdmulhq_s16(a, b)
-    #define vec_zero() \
-        vec_t { 0 }
-    #define vec_set_16(a) vdupq_n_s16(a)
-    #define vec_max_16(a, b) vmaxq_s16(a, b)
-    #define vec_min_16(a, b) vminq_s16(a, b)
-    #define vec_slli_16(a, b) vshlq_s16(a, vec_set_16(b))
-    #define vec_packus_16(a, b) reinterpret_cast<vec_t>(vcombine_u8(vqmovun_s16(a), vqmovun_s16(b)))
-    #define vec_load_psqt(a) (*(a))
-    #define vec_store_psqt(a, b) *(a) = (b)
-    #define vec_add_psqt_32(a, b) vaddq_s32(a, b)
-    #define vec_sub_psqt_32(a, b) vsubq_s32(a, b)
-    #define vec_zero_psqt() \
-        psqt_vec_t { 0 }
-    #define NumRegistersSIMD 16
-    #define MaxChunkSize 16
-
-#else
-    #undef VECTOR
-
-#endif
-
-// Compute optimal SIMD register count for feature transformer accumulation.
-template<IndexType TransformedFeatureWidth, IndexType HalfDimensions>
-class SIMDTiling {
-#ifdef VECTOR
-    // We use __m* types as template arguments, which causes GCC to emit warnings
-    // about losing some attribute information. This is irrelevant to us as we
-    // only take their size, so the following pragma are harmless.
-    #if defined(__GNUC__)
-        #pragma GCC diagnostic push
-        #pragma GCC diagnostic ignored "-Wignored-attributes"
-    #endif
-
-    template<typename SIMDRegisterType, typename LaneType, int NumLanes, int MaxRegisters>
-    static constexpr int BestRegisterCount() {
-        constexpr std::size_t RegisterSize = sizeof(SIMDRegisterType);
-        constexpr std::size_t LaneSize     = sizeof(LaneType);
-
-        static_assert(RegisterSize >= LaneSize);
-        static_assert(MaxRegisters <= NumRegistersSIMD);
-        static_assert(MaxRegisters > 0);
-        static_assert(NumRegistersSIMD > 0);
-        static_assert(RegisterSize % LaneSize == 0);
-        static_assert((NumLanes * LaneSize) % RegisterSize == 0);
-
-        const int ideal = (NumLanes * LaneSize) / RegisterSize;
-        if (ideal <= MaxRegisters)
-            return ideal;
-
-        // Look for the largest divisor of the ideal register count that is smaller than MaxRegisters
-        for (int divisor = MaxRegisters; divisor > 1; --divisor)
-            if (ideal % divisor == 0)
-                return divisor;
-
-        return 1;
-    }
-
-    #if defined(__GNUC__)
-        #pragma GCC diagnostic pop
-    #endif
-
-   public:
-    static constexpr int NumRegs =
-      BestRegisterCount<vec_t, WeightType, TransformedFeatureWidth, NumRegistersSIMD>();
-
-    static constexpr IndexType TileHeight     = NumRegs * sizeof(vec_t) / 2;
-
-    static_assert(HalfDimensions % TileHeight == 0, "TileHeight must divide HalfDimensions");
-#endif
-};
-
-
 // Input feature converter
-template<IndexType                                 TransformedFeatureDimensions,
-         Accumulator<TransformedFeatureDimensions> StateInfo::*accPtr>
+template<IndexType TransformedFeatureDimensions>
 class FeatureTransformer {
 
    public:
@@ -242,17 +83,17 @@ class FeatureTransformer {
         FeatureSet::IndexList active;
         FeatureSet::append_active_psq(pos, active);
         FeatureSet::append_active_threats(pos, active);
+        auto& accumulator = pos.state()->*accPtr;
         for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
-            entry.accumulation[j] = biases[j];
+            accumulator.accumulation[Perspective*TransformedFeatureDimensions + j] = biases[j];
         }
         for (const auto index : active)
         {
-            const IndexType offset = HalfDimensions * index;
-            for (IndexType j = 0; j < HalfDimensions; ++j)
-                entry.accumulation[j] += weights[offset + j];
+            const IndexType offset = TransformedFeatureDimensions * index;
+            for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
+                accumulator.accumulation[Perspective*TransformedFeatureDimensions + j] += weights[offset + j];
         }
     }
-
     alignas(CacheLineSize) BiasType biases[TransformedFeatureDimensions];
     alignas(CacheLineSize) WeightType weights[TransformedFeatureDimensions * InputDimensions];
 };

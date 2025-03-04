@@ -122,7 +122,7 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
 
     // We estimate the value of each piece by doing a differential evaluation from
     // the current base eval, simulating the removal of the piece from its square.
-    Value base = networks.big.evaluate(pos, &caches.big);
+    Value base = networks.big.evaluate(pos);
     base                    = pos.side_to_move() == WHITE ? base : -base;
 
     for (File f = FILE_A; f <= FILE_H; ++f)
@@ -137,14 +137,12 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
                 auto st = pos.state();
 
                 pos.remove_piece(sq);
-                st->accumulatorBig.computed[WHITE] = st->accumulatorBig.computed[BLACK] = false;
 
-                Value eval = networks.big.evaluate(pos, &caches.big);
+                Value eval = networks.big.evaluate(pos);
                 eval                       = pos.side_to_move() == WHITE ? eval : -eval;
                 v                          = base - eval;
 
                 pos.put_piece(pc, sq);
-                st->accumulatorBig.computed[WHITE] = st->accumulatorBig.computed[BLACK] = false;
             }
 
             writeSquare(f, r, pc, v);
@@ -154,29 +152,6 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
     for (int row = 0; row < 3 * 8 + 1; ++row)
         ss << board[row] << '\n';
     ss << '\n';
-
-    auto t = networks.big.trace_evaluate(pos, &caches.big);
-
-    ss << " NNUE network contributions "
-       << (pos.side_to_move() == WHITE ? "(White to move)" : "(Black to move)") << std::endl
-       << "+------------+------------+\n"
-       << "|   Bucket   |    Eval    |\n"
-       << "|            |            |\n"
-       << "+------------+------------+\n";
-
-    for (std::size_t bucket = 0; bucket < LayerStacks; ++bucket)
-    {
-        ss << "|  " << bucket << "        "  //
-           << " |  ";
-        format_cp_aligned_dot(t.eval[bucket], ss, pos);
-        ss << "  "  //
-           << " |  ";
-        if (bucket == t.correctBucket)
-            ss << " <-- this bucket is used";
-        ss << '\n';
-    }
-
-    ss << "+------------+------------+\n";
 
     return ss.str();
 }

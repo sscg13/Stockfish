@@ -60,13 +60,10 @@ class Network {
     void load(const std::string& rootDirectory, std::string evalfilePath);
     bool save(const std::optional<std::string>& filename) const;
 
-    Value evaluate(const Position&                         pos,
-                           AccumulatorCaches::Cache<FTDimensions>* cache) const;
+    Value evaluate(const Position& pos) const;
 
 
     void verify(std::string evalfilePath, const std::function<void(std::string_view)>&) const;
-    NnueEvalTrace trace_evaluate(const Position&                         pos,
-                                 AccumulatorCaches::Cache<FTDimensions>* cache) const;
 
    private:
     void load_user_net(const std::string&, const std::string&);
@@ -88,14 +85,10 @@ class Network {
 
     EvalFile         evalFile;
     EmbeddedNNUEType embeddedType;
-
-    template<IndexType Size>
-    friend struct AccumulatorCaches::Cache;
 };
 
 // Definitions of the network types
-using BigFeatureTransformer =
-  FeatureTransformer<TransformedFeatureDimensionsBig, &StateInfo::accumulatorBig>;
+using BigFeatureTransformer = FeatureTransformer<TransformedFeatureDimensionsBig>;
 using BigNetworkArchitecture = NetworkArchitecture<TransformedFeatureDimensionsBig>;
 
 using NetworkBig   = Network<BigNetworkArchitecture, BigFeatureTransformer>;
