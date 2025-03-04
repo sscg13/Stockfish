@@ -42,8 +42,6 @@ enum class EmbeddedNNUEType {
     BIG,
 };
 
-using NetworkOutput = std::tuple<Value, Value>;
-
 template<typename Arch, typename Transformer>
 class Network {
     static constexpr IndexType FTDimensions = Arch::TransformedFeatureDimensions;
@@ -62,7 +60,7 @@ class Network {
     void load(const std::string& rootDirectory, std::string evalfilePath);
     bool save(const std::optional<std::string>& filename) const;
 
-    NetworkOutput evaluate(const Position&                         pos,
+    Value evaluate(const Position&                         pos,
                            AccumulatorCaches::Cache<FTDimensions>* cache) const;
 
 
