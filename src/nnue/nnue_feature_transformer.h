@@ -284,24 +284,15 @@ class FeatureTransformer {
 
     // Read network parameters
     bool read_parameters(std::istream& stream) {
-
-        read_leb_128<BiasType>(stream, biases, HalfDimensions);
-        read_leb_128<WeightType>(stream, weights, HalfDimensions * InputDimensions);
-
-        scale_weights(true);
+        read_little_endian<WeightType>(stream, weights, TransformedFeatureDimensions * InputDimensions);
+        read_little_endian<BiasType>(stream, biases, TransformedFeatureDimensions);
         return !stream.fail();
     }
 
     // Write network parameters
     bool write_parameters(std::ostream& stream) {
-
-        unpermute_weights();
-        scale_weights(false);
-
-        write_leb_128<BiasType>(stream, biases, HalfDimensions);
-        write_leb_128<WeightType>(stream, weights, HalfDimensions * InputDimensions);
-
-        scale_weights(true);
+        write_little_endian<WeightType>(stream, weights, TransformedFeatureDimensions * InputDimensions);
+        read_little_endian<BiasType>(stream, biases, TransformedFeatureDimensions);
         return !stream.fail();
     }
 

@@ -46,27 +46,20 @@ constexpr IndexType LayerStacks = 8;
 template<IndexType L1>
 struct NetworkArchitecture {
     static constexpr IndexType TransformedFeatureDimensions = L1;
-
-    Layers::SqrClippedReLU<TransformedFeatureDimensions * 2>     ac_0;
-    Layers::AffineTransform<TransformedFeatureDimensions * 2, 1> fc_0;
+    Layers::SCReLUAffineTransform<TransformedFeatureDimensions * 2, 1> fc_0;
 
     // Read network parameters
     bool read_parameters(std::istream& stream) {
-        return fc_0.read_parameters(stream) && ac_0.read_parameters(stream)
-            && fc_1.read_parameters(stream) && ac_1.read_parameters(stream)
-            && fc_2.read_parameters(stream);
+        return fc_0.read_parameters(stream);
     }
 
     // Write network parameters
     bool write_parameters(std::ostream& stream) const {
-        return fc_0.write_parameters(stream) && ac_0.write_parameters(stream)
-            && fc_1.write_parameters(stream) && ac_1.write_parameters(stream)
-            && fc_2.write_parameters(stream);
+        return fc_0.write_parameters(stream);
     }
 
     std::int32_t propagate(const TransformedFeatureType* transformedFeatures) {
         struct alignas(CacheLineSize) Buffer {
-            alignas(CacheLineSize) typename decltype(ac_0)::OutputBuffer ac_0_out;
             alignas(CacheLineSize) typename decltype(fc_0)::OutputBuffer fc_0_out;
 
             Buffer() { std::memset(this, 0, sizeof(*this)); }
@@ -80,8 +73,6 @@ struct NetworkArchitecture {
 #else
         alignas(CacheLineSize) static thread_local Buffer buffer;
 #endif
-
-        ac_0.propagate(transformedFeatures, buffer.ac_0_out);
         fc_0.propagate(transformedFeatures, buffer.fc_0_out);
         std::int32_t outputValue = buffer.fc_0_out[0];
 
