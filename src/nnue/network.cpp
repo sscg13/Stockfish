@@ -84,10 +84,7 @@ namespace Detail {
 // Read evaluation function parameters
 template<typename T>
 bool read_parameters(std::istream& stream, T& reference) {
-
-    std::uint32_t header;
-    header = read_little_endian<std::uint32_t>(stream);
-    if (!stream || header != T::get_hash_value())
+    if (!stream)
         return false;
     return reference.read_parameters(stream);
 }
@@ -95,8 +92,6 @@ bool read_parameters(std::istream& stream, T& reference) {
 // Write evaluation function parameters
 template<typename T>
 bool write_parameters(std::ostream& stream, T& reference) {
-
-    write_little_endian<std::uint32_t>(stream, T::get_hash_value());
     return reference.write_parameters(stream);
 }
 
@@ -374,45 +369,9 @@ std::optional<std::string> Network<Arch, Transformer>::load(std::istream& stream
 }
 
 
-// Read network header
-template<typename Arch, typename Transformer>
-bool Network<Arch, Transformer>::read_header(std::istream&  stream,
-                                             std::uint32_t* hashValue,
-                                             std::string*   desc) const {
-    std::uint32_t version, size;
-
-    version    = read_little_endian<std::uint32_t>(stream);
-    *hashValue = read_little_endian<std::uint32_t>(stream);
-    size       = read_little_endian<std::uint32_t>(stream);
-    if (!stream || version != Version)
-        return false;
-    desc->resize(size);
-    stream.read(&(*desc)[0], size);
-    return !stream.fail();
-}
-
-
-// Write network header
-template<typename Arch, typename Transformer>
-bool Network<Arch, Transformer>::write_header(std::ostream&      stream,
-                                              std::uint32_t      hashValue,
-                                              const std::string& desc) const {
-    write_little_endian<std::uint32_t>(stream, Version);
-    write_little_endian<std::uint32_t>(stream, hashValue);
-    write_little_endian<std::uint32_t>(stream, std::uint32_t(desc.size()));
-    stream.write(&desc[0], desc.size());
-    return !stream.fail();
-}
-
-
 template<typename Arch, typename Transformer>
 bool Network<Arch, Transformer>::read_parameters(std::istream& stream,
                                                  std::string&  netDescription) const {
-    std::uint32_t hashValue;
-    if (!read_header(stream, &hashValue, &netDescription))
-        return false;
-    if (hashValue != Network::hash)
-        return false;
     if (!Detail::read_parameters(stream, *featureTransformer))
         return false;
     for (std::size_t i = 0; i < LayerStacks; ++i)
@@ -427,8 +386,6 @@ bool Network<Arch, Transformer>::read_parameters(std::istream& stream,
 template<typename Arch, typename Transformer>
 bool Network<Arch, Transformer>::write_parameters(std::ostream&      stream,
                                                   const std::string& netDescription) const {
-    if (!write_header(stream, Network::hash, netDescription))
-        return false;
     if (!Detail::write_parameters(stream, *featureTransformer))
         return false;
     for (std::size_t i = 0; i < LayerStacks; ++i)

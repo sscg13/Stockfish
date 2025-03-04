@@ -50,21 +50,6 @@ struct NetworkArchitecture {
     Layers::SqrClippedReLU<TransformedFeatureDimensions * 2>     ac_0;
     Layers::AffineTransform<TransformedFeatureDimensions * 2, 1> fc_0;
 
-    // Hash value embedded in the evaluation file
-    static constexpr std::uint32_t get_hash_value() {
-        // input slice hash
-        std::uint32_t hashValue = 0xEC42E90Du;
-        hashValue ^= TransformedFeatureDimensions * 2;
-
-        hashValue = decltype(fc_0)::get_hash_value(hashValue);
-        hashValue = decltype(ac_0)::get_hash_value(hashValue);
-        hashValue = decltype(fc_1)::get_hash_value(hashValue);
-        hashValue = decltype(ac_1)::get_hash_value(hashValue);
-        hashValue = decltype(fc_2)::get_hash_value(hashValue);
-
-        return hashValue;
-    }
-
     // Read network parameters
     bool read_parameters(std::istream& stream) {
         return fc_0.read_parameters(stream) && ac_0.read_parameters(stream)

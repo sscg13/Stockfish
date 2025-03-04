@@ -77,9 +77,6 @@ class Network {
     bool                       save(std::ostream&, const std::string&, const std::string&) const;
     std::optional<std::string> load(std::istream&);
 
-    bool read_header(std::istream&, std::uint32_t*, std::string*) const;
-    bool write_header(std::ostream&, std::uint32_t, const std::string&) const;
-
     bool read_parameters(std::istream&, std::string&) const;
     bool write_parameters(std::ostream&, const std::string&) const;
 
@@ -91,9 +88,6 @@ class Network {
 
     EvalFile         evalFile;
     EmbeddedNNUEType embeddedType;
-
-    // Hash value of evaluation function structure
-    static constexpr std::uint32_t hash = Transformer::get_hash_value() ^ Arch::get_hash_value();
 
     template<IndexType Size>
     friend struct AccumulatorCaches::Cache;
