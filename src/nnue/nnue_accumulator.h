@@ -36,7 +36,6 @@ using IndexType      = std::uint32_t;
 template<IndexType Size>
 struct alignas(CacheLineSize) Accumulator {
     std::int16_t accumulation[COLOR_NB][Size];
-    std::int32_t psqtAccumulation[COLOR_NB][PSQTBuckets];
     bool         computed[COLOR_NB];
 };
 
@@ -59,7 +58,6 @@ struct AccumulatorCaches {
 
         struct alignas(CacheLineSize) Entry {
             BiasType       accumulation[Size];
-            PSQTWeightType psqtAccumulation[PSQTBuckets];
             Bitboard       byColorBB[COLOR_NB];
             Bitboard       byTypeBB[PIECE_TYPE_NB];
 
@@ -68,8 +66,6 @@ struct AccumulatorCaches {
             void clear(const BiasType* biases) {
 
                 std::memcpy(accumulation, biases, sizeof(accumulation));
-                std::memset((uint8_t*) this + offsetof(Entry, psqtAccumulation), 0,
-                            sizeof(Entry) - offsetof(Entry, psqtAccumulation));
             }
         };
 
@@ -88,11 +84,9 @@ struct AccumulatorCaches {
     template<typename Networks>
     void clear(const Networks& networks) {
         big.clear(networks.big);
-        small.clear(networks.small);
     }
 
     Cache<TransformedFeatureDimensionsBig>   big;
-    Cache<TransformedFeatureDimensionsSmall> small;
 };
 
 }  // namespace Stockfish::Eval::NNUE
