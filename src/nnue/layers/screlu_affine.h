@@ -42,36 +42,34 @@ class SCReLUAffine {
     static constexpr IndexType OutputBuckets = 8;
     static constexpr IndexType OutputDimensions = 1;
 
-    OutputType output;
-
     // Read network parameters
     bool read_parameters(std::istream& stream) {
-        read_little_endian<WeightType>(stream, weights, OutputBuckets * InputDimensions);
-        read_little_endian<BiasType>(stream, biases, OutputBuckets);
+        read_little_endian<std::int16_t>(stream, weights, OutputBuckets * InputDimensions);
+        read_little_endian<std::int16_t>(stream, biases, OutputBuckets);
         return !stream.fail();
     }
 
     // Write network parameters
     bool write_parameters(std::ostream& stream) const {
-        write_little_endian<WeightType>(stream, weights, OutputBuckets * InputDimensions);
-        write_little_endian<BiasType>(stream, biases, OutputBuckets);
+        write_little_endian<std::int16_t>(stream, weights, OutputBuckets * InputDimensions);
+        write_little_endian<std::int16_t>(stream, biases, OutputBuckets);
         return !stream.fail();
     }
 
     // Forward propagation
     OutputType evaluate(const InputType* input, IndexType bucket) const {
         constexpr IndexType Start = 0;
-        output = 255*(int32_t)biases[bucket];
+        OutputType output = 255*(std::int32_t)biases[bucket];
         for (IndexType i = Start; i < InputDimensions; ++i)
         {
-            output += int32_t((input[i])*(input[i]))*weights[bucket*InputDimensions+i];
+            output += std::int32_t((input[i])*(input[i]))*weights[bucket*InputDimensions+i];
         }
         return output / 255;
     }
 
     
-    alignas(CacheLineSize) BiasType biases[OutputBuckets];
-    alignas(CacheLineSize) WeightType weights[OutputBuckets * InputDimensions];
+    alignas(CacheLineSize) std::int16_t biases[OutputBuckets];
+    alignas(CacheLineSize) std::int16_t weights[OutputBuckets * InputDimensions];
 };
 
 }  // namespace Stockfish::Eval::NNUE::Layers

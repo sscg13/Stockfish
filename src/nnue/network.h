@@ -85,10 +85,14 @@ class Network {
 
     EvalFile         evalFile;
     EmbeddedNNUEType embeddedType;
+
+    template<IndexType Size>
+    friend struct AccumulatorCaches::Cache;
 };
 
 // Definitions of the network types
-using BigFeatureTransformer = FeatureTransformer<TransformedFeatureDimensionsBig>;
+using BigFeatureTransformer =
+  FeatureTransformer<TransformedFeatureDimensionsBig, &StateInfo::accumulatorBig>;
 using BigNetworkArchitecture = NetworkArchitecture<TransformedFeatureDimensionsBig>;
 
 using NetworkBig   = Network<BigNetworkArchitecture, BigFeatureTransformer>;

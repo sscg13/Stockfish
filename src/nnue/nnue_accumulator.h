@@ -57,26 +57,27 @@ struct AccumulatorCaches {
     struct alignas(CacheLineSize) Cache {
 
         struct alignas(CacheLineSize) Entry {
-            BiasType              accumulation[Size];
-            Bitboard              byColorBB[COLOR_NB];
-            Bitboard              byTypeBB[PIECE_TYPE_NB];
-            FeatureSet::IndexList threats;
+            BiasType       accumulation[Size];
+            Bitboard       byColorBB[COLOR_NB];
+            Bitboard       byTypeBB[PIECE_TYPE_NB];
 
             // To initialize a refresh entry, we set all its bitboards empty,
             // so we put the biases in the accumulation, without any weights on top
-            // and clear all active threats
             void clear(const BiasType* biases) {
                 std::memcpy(accumulation, biases, sizeof(accumulation));
-                threats.clear();
             }
         };
 
         template<typename Network>
         void clear(const Network& network) {
-            data.clear(network.featureTransformer->biases);
+            for (auto& entries1D : entries)
+                for (auto& entry : entries1D)
+                    entry.clear(network.featureTransformer->biases);
         }
 
-        Entry data;
+        std::array<Entry, COLOR_NB>& operator[](Square sq) { return entries[sq]; }
+
+        std::array<std::array<Entry, COLOR_NB>, SQUARE_NB> entries;
     };
 
     template<typename Networks>

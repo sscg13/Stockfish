@@ -42,7 +42,8 @@ using BiasType       = std::int16_t;
 using WeightType     = std::int16_t;
 
 // Input feature converter
-template<IndexType TransformedFeatureDimensions>
+template<IndexType                                 TransformedFeatureDimensions,
+         Accumulator<TransformedFeatureDimensions> StateInfo::*accPtr>
 class FeatureTransformer {
 
    public:
@@ -71,27 +72,25 @@ class FeatureTransformer {
     // Write network parameters
     bool write_parameters(std::ostream& stream) {
         write_little_endian<WeightType>(stream, weights, TransformedFeatureDimensions * InputDimensions);
-        read_little_endian<BiasType>(stream, biases, TransformedFeatureDimensions);
+        write_little_endian<BiasType>(stream, biases, TransformedFeatureDimensions);
         return !stream.fail();
     }
-
-   private:
     //we start with non-ue
     template<Color Perspective>
     void compute_accumulator_from_scratch(const Position& pos) {
-        Square ksq = pos.square<KING>(Perspective);
         FeatureSet::IndexList active;
-        FeatureSet::append_active_psq(pos, active);
-        FeatureSet::append_active_threats(pos, active);
-        auto& accumulator = pos.state()->*accPtr;
+        FeatureSet threats;
+        threats.append_active_psq<Perspective>(pos, active);
+        threats.append_active_threats<Perspective>(pos, active);
+        const auto& accumulation = (pos.state()->*accPtr).accumulation;
         for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
-            accumulator.accumulation[Perspective*TransformedFeatureDimensions + j] = biases[j];
+            accumulation[Perspective][j] = biases[j];
         }
         for (const auto index : active)
         {
             const IndexType offset = TransformedFeatureDimensions * index;
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
-                accumulator.accumulation[Perspective*TransformedFeatureDimensions + j] += weights[offset + j];
+                accumulation[Perspective][j] += weights[offset + j];
         }
     }
     alignas(CacheLineSize) BiasType biases[TransformedFeatureDimensions];

@@ -361,6 +361,6 @@ bool Network<Arch, Transformer>::write_parameters(std::ostream&      stream,
 
 template class Network<
   NetworkArchitecture<TransformedFeatureDimensionsBig>,
-  FeatureTransformer<TransformedFeatureDimensionsBig>>;
+  FeatureTransformer<TransformedFeatureDimensionsBig, &StateInfo::accumulatorBig>>;
 
 }  // namespace Stockfish::Eval::NNUE

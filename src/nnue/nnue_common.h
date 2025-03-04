@@ -75,7 +75,7 @@ constexpr std::size_t SimdWidth = 16;
 constexpr std::size_t MaxSimdWidth = 32;
 
 // Type of input feature after conversion
-using TransformedFeatureType = std::uint16_t;
+using TransformedFeatureType = std::int16_t;
 using IndexType              = std::uint32_t;
 
 // Round n up to be a multiple of base
