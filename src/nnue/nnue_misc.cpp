@@ -122,8 +122,7 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
 
     // We estimate the value of each piece by doing a differential evaluation from
     // the current base eval, simulating the removal of the piece from its square.
-    auto [psqt, positional] = networks.big.evaluate(pos, &caches.big);
-    Value base              = psqt + positional;
+    Value base = networks.big.evaluate(pos, &caches.big);
     base                    = pos.side_to_move() == WHITE ? base : -base;
 
     for (File f = FILE_A; f <= FILE_H; ++f)
@@ -140,8 +139,7 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
                 pos.remove_piece(sq);
                 st->accumulatorBig.computed[WHITE] = st->accumulatorBig.computed[BLACK] = false;
 
-                std::tie(psqt, positional) = networks.big.evaluate(pos, &caches.big);
-                Value eval                 = psqt + positional;
+                Value eval = networks.big.evaluate(pos, &caches.big);
                 eval                       = pos.side_to_move() == WHITE ? eval : -eval;
                 v                          = base - eval;
 
@@ -161,30 +159,24 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
 
     ss << " NNUE network contributions "
        << (pos.side_to_move() == WHITE ? "(White to move)" : "(Black to move)") << std::endl
-       << "+------------+------------+------------+------------+\n"
-       << "|   Bucket   |  Material  | Positional |   Total    |\n"
-       << "|            |   (PSQT)   |  (Layers)  |            |\n"
-       << "+------------+------------+------------+------------+\n";
+       << "+------------+------------+\n"
+       << "|   Bucket   |    Eval    |\n"
+       << "|            |            |\n"
+       << "+------------+------------+\n";
 
     for (std::size_t bucket = 0; bucket < LayerStacks; ++bucket)
     {
         ss << "|  " << bucket << "        "  //
            << " |  ";
-        format_cp_aligned_dot(t.psqt[bucket], ss, pos);
+        format_cp_aligned_dot(t.eval[bucket], ss, pos);
         ss << "  "  //
            << " |  ";
-        format_cp_aligned_dot(t.positional[bucket], ss, pos);
-        ss << "  "  //
-           << " |  ";
-        format_cp_aligned_dot(t.psqt[bucket] + t.positional[bucket], ss, pos);
-        ss << "  "  //
-           << " |";
         if (bucket == t.correctBucket)
             ss << " <-- this bucket is used";
         ss << '\n';
     }
 
-    ss << "+------------+------------+------------+------------+\n";
+    ss << "+------------+------------+\n";
 
     return ss.str();
 }
