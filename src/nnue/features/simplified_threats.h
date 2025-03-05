@@ -62,6 +62,9 @@ class Simplified_Threats {
         PS_NONE, PS_W_PAWN, PS_W_KNIGHT, PS_W_BISHOP, PS_W_ROOK, PS_W_QUEEN, PS_W_KING, PS_NONE,
         PS_NONE, PS_B_PAWN, PS_B_KNIGHT, PS_B_BISHOP, PS_B_ROOK, PS_B_QUEEN, PS_B_KING, PS_NONE};
 
+    
+    IndexType threatoffsets[PIECE_NB][SQUARE_NB+2];
+    void init_threat_offsets();
    public:
     // Feature name
     static constexpr const char* Name = "Simplified_Threats(Friend)";
@@ -100,8 +103,8 @@ class Simplified_Threats {
     static constexpr IndexType MaxActiveDimensions = 128;
     using IndexList                                = ValueList<IndexType, MaxActiveDimensions>;
 
-    IndexType threatoffsets[PIECE_NB][SQUARE_NB+2];
-    void init_threat_offsets();
+
+    Simplified_Threats() { init_threat_offsets(); };
     // Index of a feature for a given king position and another piece on some square
     template<Color Perspective>
     IndexType make_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq);

@@ -142,7 +142,7 @@ void Network<Arch, Transformer>::load(const std::string& rootDirectory, std::str
 #else
     std::vector<std::string> dirs = {"<internal>", "", rootDirectory};
 #endif
-
+    std::cout << "network::load(rootDirectory, evalfilePath)" << std::endl;
     if (evalfilePath.empty())
         evalfilePath = evalFile.defaultName;
 
@@ -215,8 +215,8 @@ Network<Arch, Transformer>::evaluate(const Position& pos) const {
 #endif
 
     ASSERT_ALIGNED(transformedFeatures, alignment);
-
     const int bucket = (pos.count<ALL_PIECES>() - 1) / 4;
+    featureTransformer->compute_accumulators_from_scratch(pos);
     const int eval = network[0].evaluate(transformedFeatures, bucket);
     return static_cast<Value>(400 * eval / (255 * 64));
 }
@@ -227,7 +227,8 @@ void Network<Arch, Transformer>::verify(std::string                             
                                         const std::function<void(std::string_view)>& f) const {
     if (evalfilePath.empty())
         evalfilePath = evalFile.defaultName;
-
+    std::cout << "network::verify()" << std::endl;
+    std::cout << "Current path: " << evalFile.current << std::endl;
     if (evalFile.current != evalfilePath)
     {
         if (f)
@@ -286,7 +287,7 @@ void Network<Arch, Transformer>::load_internal() {
             setp(p, p + n);
         }
     };
-
+    std::cout << "network::load_internal()" << std::endl;
     const auto embedded = get_embedded(embeddedType);
 
     MemoryBuffer buffer(const_cast<char*>(reinterpret_cast<const char*>(embedded.data)),
@@ -325,7 +326,7 @@ template<typename Arch, typename Transformer>
 std::optional<std::string> Network<Arch, Transformer>::load(std::istream& stream) {
     initialize();
     std::string description;
-
+    std::cout << "network::load()" << std::endl;
     return read_parameters(stream, description) ? std::make_optional(description) : std::nullopt;
 }
 
@@ -333,13 +334,20 @@ std::optional<std::string> Network<Arch, Transformer>::load(std::istream& stream
 template<typename Arch, typename Transformer>
 bool Network<Arch, Transformer>::read_parameters(std::istream& stream,
                                                  std::string&  netDescription) const {
+    std::cout << "Read L1 network::read_parameters()" << std::endl;
     if (!Detail::read_parameters(stream, *featureTransformer))
+        std::cout << "Error reading L1 weights" << std::endl;
         return false;
+
+    std::cout << "Does this print" << std::endl;
     for (std::size_t i = 0; i < LayerStacks; ++i)
     {
+        std::cout << "Read L2 network::read_parameters()" << std::endl;
         if (!Detail::read_parameters(stream, network[i]))
+            std::cout << "Error reading L2 network::read_parameters()" << std::endl;
             return false;
     }
+    std::cout << "Finish read network::read_parameters()" << std::endl;
     return stream && stream.peek() == std::ios::traits_type::eof();
 }
 

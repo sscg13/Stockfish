@@ -17,7 +17,6 @@ int main(int argc, char* argv[]) {
     Position::init();
     
     Eval::NNUE::Features::Simplified_Threats test;
-    test.init_threat_offsets();
 
     Position pos;
     std::string fen1 = std::string(argv[1]);

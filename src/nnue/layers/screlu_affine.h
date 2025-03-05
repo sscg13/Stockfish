@@ -44,6 +44,7 @@ class SCReLUAffine {
 
     // Read network parameters
     bool read_parameters(std::istream& stream) {
+        std::cout << "L2::read_parameters()" << std::endl;
         read_little_endian<std::int16_t>(stream, weights, OutputBuckets * InputDimensions);
         read_little_endian<std::int16_t>(stream, biases, OutputBuckets);
         return !stream.fail();

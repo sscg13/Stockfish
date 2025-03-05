@@ -49,6 +49,7 @@ class FeatureTransformer {
    public:
     // Output type
     using OutputType = TransformedFeatureType;
+    FeatureSet threats;
 
     // Number of input/output dimensions
     static constexpr IndexType InputDimensions  = FeatureSet::Dimensions;
@@ -64,6 +65,7 @@ class FeatureTransformer {
 
     // Read network parameters
     bool read_parameters(std::istream& stream) {
+        std::cout << "FT::read_parameters()" << std::endl;
         read_little_endian<WeightType>(stream, weights, TransformedFeatureDimensions * InputDimensions);
         read_little_endian<BiasType>(stream, biases, TransformedFeatureDimensions);
         return !stream.fail();
@@ -76,25 +78,36 @@ class FeatureTransformer {
         return !stream.fail();
     }
     //we start with non-ue
-    template<Color Perspective>
-    void compute_accumulator_from_scratch(const Position& pos) {
-        FeatureSet::IndexList active;
-        FeatureSet threats;
-        threats.append_active_psq<Perspective>(pos, active);
-        threats.append_active_threats<Perspective>(pos, active);
-        const auto& accumulation = (pos.state()->*accPtr).accumulation;
+    void compute_accumulators_from_scratch(const Position& pos) {
+        FeatureSet::IndexList white, black;
+        threats.append_active_psq<WHITE>(pos, white);
+        threats.append_active_threats<WHITE>(pos, white);
+        threats.append_active_psq<BLACK>(pos, black);
+        threats.append_active_threats<BLACK>(pos, black);
+        auto& accumulation = (pos.state()->*accPtr).accumulation;
         for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
-            accumulation[Perspective][j] = biases[j];
+            accumulation[pos.side_to_move()][j] = biases[j];
         }
-        for (const auto index : active)
+        for (const auto index : white)
         {
             const IndexType offset = TransformedFeatureDimensions * index;
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
-                accumulation[Perspective][j] += weights[offset + j];
+                accumulation[pos.side_to_move()][j] += weights[offset + j];
+        }
+        for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
+            accumulation[~pos.side_to_move()][j] = biases[j];
+        }
+        for (const auto index : black)
+        {
+            const IndexType offset = TransformedFeatureDimensions * index;
+            for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
+                accumulation[~pos.side_to_move()][j] += weights[offset + j];
         }
     }
     alignas(CacheLineSize) BiasType biases[TransformedFeatureDimensions];
     alignas(CacheLineSize) WeightType weights[TransformedFeatureDimensions * InputDimensions];
+
+
 };
 
 }  // namespace Stockfish::Eval::NNUE
