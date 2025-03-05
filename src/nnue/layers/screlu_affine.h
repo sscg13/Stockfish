@@ -43,7 +43,6 @@ class SCReLUAffine {
 
     // Read network parameters
     bool read_parameters(std::istream& stream) {
-        std::cout << "L2::read_parameters()" << std::endl;
         read_little_endian<std::int16_t>(stream, weights, OutputBuckets * InputDimensions);
         read_little_endian<std::int16_t>(stream, biases, OutputBuckets);
         return !stream.fail();
@@ -61,12 +60,8 @@ class SCReLUAffine {
         assert(bucket < OutputBuckets);
         constexpr IndexType Start = 0;
         OutputType output = 255*(std::int32_t)biases[bucket];
-        std::cout << "What is actually getting passed: (stm)\n";
         for (IndexType i = Start; i < InputDimensions; ++i)
         {
-            if (i < InputDimensions/2) {
-                std::cout << input[i] << "\n";
-            }
             output += std::min(255, std::max((int)input[i], 0))*std::min(255, std::max((int)input[i], 0))*(int)weights[bucket*InputDimensions+i];
         }
         return output / 255;

@@ -84,12 +84,9 @@ namespace Detail {
 // Read evaluation function parameters
 template<typename T>
 bool read_parameters(std::istream& stream, T& reference) {
-    std::cout << "Detail::read_parameters()" << std::endl;
     if (!stream)
         return false;
-    std::cout << "Detail::read_parameters(stream still exists)" << std::endl;
     bool success = reference.read_parameters(stream);
-    std::cout << "Detail::read_parameters() return value: " << success << std::endl;
     return success;
 }
 
@@ -146,7 +143,6 @@ void Network<Arch, Transformer>::load(const std::string& rootDirectory, std::str
 #else
     std::vector<std::string> dirs = {"<internal>", "", rootDirectory};
 #endif
-    std::cout << "network::load(rootDirectory, evalfilePath) * {<internal>, '', rootDirectory}" << std::endl;
     if (evalfilePath.empty())
         evalfilePath = evalFile.defaultName;
 
@@ -220,8 +216,9 @@ Network<Arch, Transformer>::evaluate(const Position& pos) const {
 
     ASSERT_ALIGNED(transformedFeatures, alignment);
     const int bucket = (pos.count<ALL_PIECES>() - 1) / 4;
-    featureTransformer->compute_accumulators_from_scratch(pos);
-    const int eval = network[0].evaluate(transformedFeatures, bucket);
+    std::int16_t acc[2*TransformedFeatureDimensionsBig];
+    featureTransformer->compute_accumulators_from_scratch(pos, acc);
+    const int eval = network[0].evaluate(acc, bucket);
     return static_cast<Value>(340 * eval / (255 * 64));
 }
 
@@ -231,8 +228,6 @@ void Network<Arch, Transformer>::verify(std::string                             
                                         const std::function<void(std::string_view)>& f) const {
     if (evalfilePath.empty())
         evalfilePath = evalFile.defaultName;
-    std::cout << "network::verify()" << std::endl;
-    std::cout << "Current path: " << evalFile.current << std::endl;
     if (evalFile.current != evalfilePath)
     {
         if (f)
@@ -270,8 +265,6 @@ void Network<Arch, Transformer>::verify(std::string                             
 template<typename Arch, typename Transformer>
 void Network<Arch, Transformer>::load_user_net(const std::string& dir,
                                                const std::string& evalfilePath) {
-
-    std::cout << "network::load_user_net()" << std::endl;
     std::ifstream stream(dir + evalfilePath, std::ios::binary);
     auto          description = load(stream);
 
@@ -293,7 +286,6 @@ void Network<Arch, Transformer>::load_internal() {
             setp(p, p + n);
         }
     };
-    std::cout << "network::load_internal()" << std::endl;
     const auto embedded = get_embedded(embeddedType);
 
     MemoryBuffer buffer(const_cast<char*>(reinterpret_cast<const char*>(embedded.data)),
@@ -332,7 +324,6 @@ template<typename Arch, typename Transformer>
 std::optional<std::string> Network<Arch, Transformer>::load(std::istream& stream) {
     initialize();
     std::string description;
-    std::cout << "network::load()" << std::endl;
     return read_parameters(stream, description) ? std::make_optional(description) : std::nullopt;
 }
 
@@ -340,23 +331,17 @@ std::optional<std::string> Network<Arch, Transformer>::load(std::istream& stream
 template<typename Arch, typename Transformer>
 bool Network<Arch, Transformer>::read_parameters(std::istream& stream,
                                                  std::string&  netDescription) const {
-    std::cout << "Read L1 network::read_parameters()" << std::endl;
     netDescription = "why does this exist";
     if (!Detail::read_parameters(stream, *featureTransformer)) {
-        std::cout << "Error reading L1 weights" << std::endl;
         return false;
     }
 
-    std::cout << "Does this print" << std::endl;
     for (std::size_t i = 0; i < LayerStacks; ++i)
     {
-        std::cout << "Read L2 network::read_parameters()" << std::endl;
         if (!Detail::read_parameters(stream, network[i])) {
-            std::cout << "Error reading L2 network::read_parameters()" << std::endl;
             return false;
         }
     }
-    std::cout << "Finish read network::read_parameters()" << std::endl;
     return stream && stream.peek() == std::ios::traits_type::eof();
 }
 

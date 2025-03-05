@@ -241,12 +241,10 @@ void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 // network related
 
 void Engine::verify_networks() const {
-    std::cout << "Engine::verify_networks()" << std::endl;
     networks->big.verify(options["EvalFile"], onVerifyNetworks);
 }
 
 void Engine::load_networks() {
-    std::cout << "Engine::load_networks()" << std::endl;
     networks.modify_and_replicate([this](NN::Networks& networks_) {
         networks_.big.load(binaryDirectory, options["EvalFile"]);
     });
@@ -255,7 +253,6 @@ void Engine::load_networks() {
 }
 
 void Engine::load_big_network(const std::string& file) {
-    std::cout << "Engine::load_big_network()" << std::endl;
     networks.modify_and_replicate(
       [this, &file](NN::Networks& networks_) { networks_.big.load(binaryDirectory, file); });
     threads.clear();
