@@ -68,6 +68,8 @@ class FeatureTransformer {
         std::cout << "FT::read_parameters()" << std::endl;
         read_little_endian<WeightType>(stream, weights, TransformedFeatureDimensions * InputDimensions);
         read_little_endian<BiasType>(stream, biases, TransformedFeatureDimensions);
+        std::cout << "FT::read_parameters(after read_little_endian)" << std::endl;
+        std::cout << "stream failure state: " << stream.fail() << std::endl;
         return !stream.fail();
     }
 
@@ -85,12 +87,15 @@ class FeatureTransformer {
         threats.append_active_psq<BLACK>(pos, black);
         threats.append_active_threats<BLACK>(pos, black);
         auto& accumulation = (pos.state()->*accPtr).accumulation;
+        std::cout << pos.side_to_move() << "\n";
         for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
             accumulation[pos.side_to_move()][j] = biases[j];
         }
         for (const auto index : white)
         {
+            //std::cout << "Feature " << index << " added (white perspective)\n";
             const IndexType offset = TransformedFeatureDimensions * index;
+            assert(offset < TransformedFeatureDimensions * InputDimensions);
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
                 accumulation[pos.side_to_move()][j] += weights[offset + j];
         }
@@ -103,7 +108,14 @@ class FeatureTransformer {
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
                 accumulation[~pos.side_to_move()][j] += weights[offset + j];
         }
+
+        
+    std::cout << "What we think is getting passed: (stm)\n";
+    for (int i = 0; i < TransformedFeatureDimensions; i++) {
+        std::cout << accumulation[0][i] << "\n";
     }
+    }
+
     alignas(CacheLineSize) BiasType biases[TransformedFeatureDimensions];
     alignas(CacheLineSize) WeightType weights[TransformedFeatureDimensions * InputDimensions];
 

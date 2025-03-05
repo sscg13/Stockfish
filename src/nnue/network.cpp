@@ -84,9 +84,13 @@ namespace Detail {
 // Read evaluation function parameters
 template<typename T>
 bool read_parameters(std::istream& stream, T& reference) {
+    std::cout << "Detail::read_parameters()" << std::endl;
     if (!stream)
         return false;
-    return reference.read_parameters(stream);
+    std::cout << "Detail::read_parameters(stream still exists)" << std::endl;
+    bool success = reference.read_parameters(stream);
+    std::cout << "Detail::read_parameters() return value: " << success << std::endl;
+    return success;
 }
 
 // Write evaluation function parameters
@@ -142,7 +146,7 @@ void Network<Arch, Transformer>::load(const std::string& rootDirectory, std::str
 #else
     std::vector<std::string> dirs = {"<internal>", "", rootDirectory};
 #endif
-    std::cout << "network::load(rootDirectory, evalfilePath)" << std::endl;
+    std::cout << "network::load(rootDirectory, evalfilePath) * {<internal>, '', rootDirectory}" << std::endl;
     if (evalfilePath.empty())
         evalfilePath = evalFile.defaultName;
 
@@ -218,7 +222,7 @@ Network<Arch, Transformer>::evaluate(const Position& pos) const {
     const int bucket = (pos.count<ALL_PIECES>() - 1) / 4;
     featureTransformer->compute_accumulators_from_scratch(pos);
     const int eval = network[0].evaluate(transformedFeatures, bucket);
-    return static_cast<Value>(400 * eval / (255 * 64));
+    return static_cast<Value>(340 * eval / (255 * 64));
 }
 
 
@@ -266,6 +270,8 @@ void Network<Arch, Transformer>::verify(std::string                             
 template<typename Arch, typename Transformer>
 void Network<Arch, Transformer>::load_user_net(const std::string& dir,
                                                const std::string& evalfilePath) {
+
+    std::cout << "network::load_user_net()" << std::endl;
     std::ifstream stream(dir + evalfilePath, std::ios::binary);
     auto          description = load(stream);
 
@@ -335,17 +341,20 @@ template<typename Arch, typename Transformer>
 bool Network<Arch, Transformer>::read_parameters(std::istream& stream,
                                                  std::string&  netDescription) const {
     std::cout << "Read L1 network::read_parameters()" << std::endl;
-    if (!Detail::read_parameters(stream, *featureTransformer))
+    netDescription = "why does this exist";
+    if (!Detail::read_parameters(stream, *featureTransformer)) {
         std::cout << "Error reading L1 weights" << std::endl;
         return false;
+    }
 
     std::cout << "Does this print" << std::endl;
     for (std::size_t i = 0; i < LayerStacks; ++i)
     {
         std::cout << "Read L2 network::read_parameters()" << std::endl;
-        if (!Detail::read_parameters(stream, network[i]))
+        if (!Detail::read_parameters(stream, network[i])) {
             std::cout << "Error reading L2 network::read_parameters()" << std::endl;
             return false;
+        }
     }
     std::cout << "Finish read network::read_parameters()" << std::endl;
     return stream && stream.peek() == std::ios::traits_type::eof();

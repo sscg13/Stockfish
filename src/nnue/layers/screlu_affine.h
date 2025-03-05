@@ -40,7 +40,6 @@ class SCReLUAffine {
     // Number of input/output dimensions
     static constexpr IndexType InputDimensions = InDims;
     static constexpr IndexType OutputBuckets = 8;
-    static constexpr IndexType OutputDimensions = 1;
 
     // Read network parameters
     bool read_parameters(std::istream& stream) {
@@ -59,11 +58,16 @@ class SCReLUAffine {
 
     // Forward propagation
     OutputType evaluate(const InputType* input, IndexType bucket) const {
+        assert(bucket < OutputBuckets);
         constexpr IndexType Start = 0;
         OutputType output = 255*(std::int32_t)biases[bucket];
+        std::cout << "What is actually getting passed: (stm)\n";
         for (IndexType i = Start; i < InputDimensions; ++i)
         {
-            output += std::int32_t((input[i])*(input[i]))*weights[bucket*InputDimensions+i];
+            if (i < InputDimensions/2) {
+                std::cout << input[i] << "\n";
+            }
+            output += std::min(255, std::max((int)input[i], 0))*std::min(255, std::max((int)input[i], 0))*(int)weights[bucket*InputDimensions+i];
         }
         return output / 255;
     }
