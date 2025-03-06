@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <memory>
 #include <optional>
 #include <type_traits>
@@ -229,7 +230,7 @@ std::string Network<Arch, Transformer>::get_ft_stats() const {
     ss << "Number of accumulator updates: " << featureTransformer->acc_updates << "\n";
     ss << "Number of positions looped through: " << featureTransformer->pos_loops << "\n";
     ss << "Number of feature indices looped through: " << featureTransformer->threat_loops << "\n";
-    return ss.string();
+    return ss.str();
 }
 
 template<typename Arch, typename Transformer>
