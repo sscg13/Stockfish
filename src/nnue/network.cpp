@@ -217,7 +217,8 @@ Network<Arch, Transformer>::evaluate(const Position& pos) const {
     ASSERT_ALIGNED(transformedFeatures, alignment);
     const int bucket = (pos.count<ALL_PIECES>() - 1) / 4;
     std::int16_t acc[2*TransformedFeatureDimensionsBig];
-    featureTransformer->compute_accumulators_from_scratch(pos, acc);
+    //featureTransformer->compute_accumulators_from_scratch(pos, acc);
+    featureTransformer->transform(pos, acc);
     const int eval = network[0].evaluate(acc, bucket);
     return static_cast<Value>(340 * eval / (255 * 64));
 }

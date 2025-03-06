@@ -115,6 +115,9 @@ class Simplified_Threats {
 
     template<Color Perspective>
     void append_active_psq(const Bitboard *colorBB, const Bitboard *pieceBB, const Piece *board, IndexList& active);
+
+    template<Color Perspective>
+    void append_active_features(const Position& pos, IndexList& active);
     /*
     // Returns whether the change stored in this StateInfo means
     // that a full accumulator refresh is required.

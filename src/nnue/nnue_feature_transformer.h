@@ -108,11 +108,43 @@ class FeatureTransformer {
                 acc[TransformedFeatureDimensions*(~pos.side_to_move())+j] += weights[offset + j];
         }
     }
+    
+
+    template<Color Perspective>
+    void update_accumulator_scratch(const Position& pos) {
+
+        // The size must be enough to contain the largest possible update.
+        // That might depend on the feature set and generally relies on the
+        // feature set's update cost calculation to be correct and never allow
+        // updates with more added/removed features than MaxActiveDimensions.
+        // In this case, the maximum size of both feature addition and removal
+        // is 2, since we are incrementally updating one move at a time.
+        FeatureSet::IndexList features;
+        auto& accumulator = pos.state()->*accPtr;
+        /*
+        if constexpr (Forward)
+            FeatureSet::append_changed_indices<Perspective>(ksq, next->dirtyPiece, removed, added);
+        else
+            FeatureSet::append_changed_indices<Perspective>(ksq, computed->dirtyPiece, added,
+                                                            removed);
+        */
+        threats.append_active_features<Perspective>(pos, features);
+        for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
+            accumulator.accumulation[Perspective][j] = biases[j];
+        }
+        for (const auto index : features)
+        {
+            const IndexType offset = TransformedFeatureDimensions * index;
+            assert(offset < TransformedFeatureDimensions * InputDimensions);
+            for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
+                accumulator.accumulation[Perspective][j] += weights[offset + j];
+        }
+    }
 
     template<Color Perspective, IncUpdateDirection Direction = FORWARD>
     void update_accumulator_incremental(const Square     ksq,
                                         StateInfo*       target_state,
-                                        const StateInfo* computed) const {
+                                        const StateInfo* computed) {
         [[maybe_unused]] constexpr bool Forward   = Direction == FORWARD;
         [[maybe_unused]] constexpr bool Backwards = Direction == BACKWARDS;
         assert((computed->*accPtr).computed[Perspective]);
@@ -188,6 +220,55 @@ class FeatureTransformer {
         if (next != target_state)
             update_accumulator_incremental<Perspective, Direction>(ksq, target_state, next);
     }
+
+    template<Color Perspective>
+    void update_accumulator(const Position& pos) {
+        StateInfo* st = pos.state();
+        if ((st->*accPtr).computed[Perspective])
+            return;  // nothing to do
+
+        // Look for a usable already computed accumulator of an earlier position.
+        // Always try to do an incremental update as most accumulators will be reusable.
+        do
+        {
+            if (!st->previous || st->previous->next != st)
+            {
+                // compute accumulator from scratch for this position
+                update_accumulator_scratch<Perspective>(pos);
+                if (st != pos.state())
+                    // when computing an accumulator from scratch we can use it to
+                    // efficiently compute the accumulator backwards, until we get to a king
+                    // move. We expect that we will need these accumulators later anyway, so
+                    // computing them now will save some work.
+                    update_accumulator_incremental<Perspective, BACKWARDS>(
+                      pos.square<KING>(Perspective), st, pos.state());
+                return;
+            }
+            st = st->previous;
+        } while (!(st->*accPtr).computed[Perspective]);
+
+        // Start from the oldest computed accumulator, update all the
+        // accumulators up to the current position.
+        update_accumulator_incremental<Perspective>(pos.square<KING>(Perspective), pos.state(), st);
+    }
+
+    void transform(const Position& pos, OutputType* output) {
+        update_accumulator<WHITE>(pos);
+        update_accumulator<BLACK>(pos);
+
+        const Color perspectives[2]  = {pos.side_to_move(), ~pos.side_to_move()};
+        const auto& accumulation = (pos.state()->*accPtr).accumulation;
+
+        for (IndexType p = 0; p < 2; ++p)
+        {
+            const IndexType offset = TransformedFeatureDimensions * p;
+
+            for (IndexType j = 0; j < TransformedFeatureDimensions; ++j)
+            {
+                output[offset + j] = accumulation[perspectives[p]][j];
+            }
+        }
+    }  // end of function transform()
 
     alignas(CacheLineSize) BiasType biases[TransformedFeatureDimensions];
     alignas(CacheLineSize) WeightType weights[TransformedFeatureDimensions * InputDimensions];
