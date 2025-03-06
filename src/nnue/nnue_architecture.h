@@ -49,7 +49,6 @@ struct NetworkArchitecture {
     }
     // Read network parameters
     bool read_parameters(std::istream& stream) {
-        std::cout << "NNArch::read_parameters()" << std::endl;
         return output.read_parameters(stream);
     }
 

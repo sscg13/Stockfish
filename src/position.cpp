@@ -904,6 +904,15 @@ void Position::do_move(Move                      m,
         }
     }
 
+    for (int i = 0; i < 2; i++) {
+        st->colorBB[i] = byColorBB[i];
+    }
+    for (int i = 0; i < 8; i++) {
+        st->pieceBB[i] = byTypeBB[i];
+    }
+    for (int i = 0; i < 64; i++) {
+        st->board[i] = board[i];
+    }
     assert(pos_is_ok());
 }
 
@@ -1036,6 +1045,16 @@ void Position::do_null_move(StateInfo& newSt, const TranspositionTable& tt) {
     set_check_info();
 
     st->repetition = 0;
+    
+    for (int i = 0; i < 2; i++) {
+        st->colorBB[i] = byColorBB[i];
+    }
+    for (int i = 0; i < 8; i++) {
+        st->pieceBB[i] = byTypeBB[i];
+    }
+    for (int i = 0; i < 64; i++) {
+        st->board[i] = board[i];
+    }
 
     assert(pos_is_ok());
 }

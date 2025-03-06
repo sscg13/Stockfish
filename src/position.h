@@ -63,8 +63,11 @@ struct StateInfo {
     int        repetition;
 
     // Used by NNUE
-    DirtyPiece                                                             dirtyPiece;
-    Eval::NNUE::Accumulator<Eval::NNUE::TransformedFeatureDimensionsBig>   accumulatorBig;
+    Bitboard colorBB[COLOR_NB];
+    Bitboard pieceBB[PIECE_NB];
+    Piece board[SQUARE_NB];
+    DirtyPiece dirtyPiece;
+    Eval::NNUE::Accumulator<Eval::NNUE::TransformedFeatureDimensionsBig> accumulatorBig;
 };
 
 
