@@ -61,7 +61,7 @@ class Network {
     bool save(const std::optional<std::string>& filename) const;
 
     Value evaluate(const Position& pos) const;
-
+    std::string get_ft_stats() const;
 
     void verify(std::string evalfilePath, const std::function<void(std::string_view)>&) const;
 

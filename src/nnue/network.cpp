@@ -223,6 +223,14 @@ Network<Arch, Transformer>::evaluate(const Position& pos) const {
     return static_cast<Value>(340 * eval / (255 * 64));
 }
 
+template<typename Arch, typename Transformer>
+std::string Network<Arch, Transformer>::get_ft_stats() const {
+    std::stringstream ss;
+    ss << "Number of accumulator updates: " << featureTransformer->acc_updates << "\n";
+    ss << "Number of positions looped through: " << featureTransformer->pos_loops << "\n";
+    ss << "Number of feature indices looped through: " << featureTransformer->threat_loops << "\n";
+    return ss.string();
+}
 
 template<typename Arch, typename Transformer>
 void Network<Arch, Transformer>::verify(std::string                                  evalfilePath,

@@ -122,8 +122,8 @@ class FeatureTransformer {
     void update_accumulator_incremental(const Square     ksq,
                                         StateInfo*       target_state,
                                         const StateInfo* computed) {
-        //[[maybe_unused]] constexpr bool Forward   = Direction == FORWARD;
-        //[[maybe_unused]] constexpr bool Backwards = Direction == BACKWARDS;
+        [[maybe_unused]] constexpr bool Forward   = Direction == FORWARD;
+        [[maybe_unused]] constexpr bool Backwards = Direction == BACKWARDS;
         assert((computed->*accPtr).computed[Perspective]);
 
         StateInfo* next = Forward ? computed->next : computed->previous;

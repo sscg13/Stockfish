@@ -152,7 +152,7 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
     for (int row = 0; row < 3 * 8 + 1; ++row)
         ss << board[row] << '\n';
     ss << '\n';
-
+    ss << networks.big.get_ft_stats();
     return ss.str();
 }
 
