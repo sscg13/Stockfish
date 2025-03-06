@@ -41,6 +41,11 @@ namespace Stockfish::Eval::NNUE {
 using BiasType       = std::int16_t;
 using WeightType     = std::int16_t;
 
+enum IncUpdateDirection {
+    FORWARD,
+    BACKWARDS
+};
+
 // Input feature converter
 template<IndexType                                 TransformedFeatureDimensions,
          Accumulator<TransformedFeatureDimensions> StateInfo::*accPtr>
@@ -102,6 +107,86 @@ class FeatureTransformer {
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
                 acc[TransformedFeatureDimensions*(~pos.side_to_move())+j] += weights[offset + j];
         }
+    }
+
+    template<Color Perspective, IncUpdateDirection Direction = FORWARD>
+    void update_accumulator_incremental(const Square     ksq,
+                                        StateInfo*       target_state,
+                                        const StateInfo* computed) const {
+        [[maybe_unused]] constexpr bool Forward   = Direction == FORWARD;
+        [[maybe_unused]] constexpr bool Backwards = Direction == BACKWARDS;
+        assert((computed->*accPtr).computed[Perspective]);
+
+        StateInfo* next = Forward ? computed->next : computed->previous;
+
+        assert(next != nullptr);
+        assert(!(next->*accPtr).computed[Perspective]);
+
+        // The size must be enough to contain the largest possible update.
+        // That might depend on the feature set and generally relies on the
+        // feature set's update cost calculation to be correct and never allow
+        // updates with more added/removed features than MaxActiveDimensions.
+        // In this case, the maximum size of both feature addition and removal
+        // is 2, since we are incrementally updating one move at a time.
+        FeatureSet::IndexList removed, added;
+        FeatureSet::IndexList oldfeatures, newfeatures;
+        /*
+        if constexpr (Forward)
+            FeatureSet::append_changed_indices<Perspective>(ksq, next->dirtyPiece, removed, added);
+        else
+            FeatureSet::append_changed_indices<Perspective>(ksq, computed->dirtyPiece, added,
+                                                            removed);
+        */
+        threats.append_active_psq<Perspective>(computed->colorBB, computed->pieceBB, computed->board, oldfeatures);
+        threats.append_active_threats<Perspective>(computed->colorBB, computed->pieceBB, computed->board, oldfeatures);
+        threats.append_active_psq<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
+        threats.append_active_threats<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
+        write_difference(oldfeatures, newfeatures, removed, added);
+        if (removed.size() == 0 && added.size() == 0)
+        {
+            std::memcpy((next->*accPtr).accumulation[Perspective],
+                        (computed->*accPtr).accumulation[Perspective],
+                        TransformedFeatureDimensions * sizeof(BiasType));
+        }
+        else if (newfeatures.size() <= removed.size() + added.size()) {
+            for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
+                (next->*accPtr).accumulation[Perspective][j] = biases[j];
+            }
+            for (const auto index : newfeatures)
+            {
+                const IndexType offset = TransformedFeatureDimensions * index;
+                assert(offset < TransformedFeatureDimensions * InputDimensions);
+                for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
+                    (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
+            }
+        }
+        else
+        {
+            std::memcpy((next->*accPtr).accumulation[Perspective],
+                        (computed->*accPtr).accumulation[Perspective],
+                        TransformedFeatureDimensions * sizeof(BiasType));
+
+            // Difference calculation for the deactivated features
+            for (const auto index : removed)
+            {
+                const IndexType offset = TransformedFeatureDimensions * index;
+                for (IndexType i = 0; i < TransformedFeatureDimensions; ++i)
+                    (next->*accPtr).accumulation[Perspective][i] -= weights[offset + i];
+            }
+
+            // Difference calculation for the activated features
+            for (const auto index : added)
+            {
+                const IndexType offset = TransformedFeatureDimensions * index;
+                for (IndexType i = 0; i < TransformedFeatureDimensions; ++i)
+                    (next->*accPtr).accumulation[Perspective][i] += weights[offset + i];
+            }
+        }
+
+        (next->*accPtr).computed[Perspective] = true;
+
+        if (next != target_state)
+            update_accumulator_incremental<Perspective, Direction>(ksq, target_state, next);
     }
 
     alignas(CacheLineSize) BiasType biases[TransformedFeatureDimensions];
