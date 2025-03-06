@@ -79,10 +79,10 @@ class FeatureTransformer {
     //we start with non-ue
     void compute_accumulators_from_scratch(const Position& pos, OutputType* acc) {
         FeatureSet::IndexList white, black;
-        threats.append_active_psq<WHITE>(pos, white);
-        threats.append_active_threats<WHITE>(pos, white);
-        threats.append_active_psq<BLACK>(pos, black);
-        threats.append_active_threats<BLACK>(pos, black);
+        threats.append_active_psq<WHITE>(pos.byColorBB, pos.byTypeBB, pos.board, white);
+        threats.append_active_threats<WHITE>(pos.byColorBB, pos.byTypeBB, pos.board, white);
+        threats.append_active_psq<BLACK>(pos.byColorBB, pos.byTypeBB, pos.board, black);
+        threats.append_active_threats<BLACK>(pos.byColorBB, pos.byTypeBB, pos.board, black);
         for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
             acc[TransformedFeatureDimensions*pos.side_to_move()+j] = biases[j];
         }

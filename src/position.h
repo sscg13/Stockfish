@@ -176,7 +176,10 @@ class Position {
 
     void put_piece(Piece pc, Square s);
     void remove_piece(Square s);
-
+    
+    Bitboard   byTypeBB[PIECE_TYPE_NB];
+    Bitboard   byColorBB[COLOR_NB];
+    Piece      board[SQUARE_NB];
    private:
     // Initialization helpers (used while setting up a position)
     void set_castling_right(Color c, Square rfrom);
@@ -191,9 +194,6 @@ class Position {
     Key adjust_key50(Key k) const;
 
     // Data members
-    Piece      board[SQUARE_NB];
-    Bitboard   byTypeBB[PIECE_TYPE_NB];
-    Bitboard   byColorBB[COLOR_NB];
     int        pieceCount[PIECE_NB];
     int        castlingRightsMask[SQUARE_NB];
     Square     castlingRookSquare[CASTLING_RIGHT_NB];
