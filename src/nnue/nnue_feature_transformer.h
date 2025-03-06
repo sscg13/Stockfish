@@ -55,7 +55,9 @@ class FeatureTransformer {
     // Output type
     using OutputType = TransformedFeatureType;
     FeatureSet threats;
-
+    int acc_updates = 0;
+    int pos_loops = 0;
+    int threat_loops = 0;
     // Number of input/output dimensions
     static constexpr IndexType InputDimensions  = FeatureSet::Dimensions;
     static constexpr IndexType OutputDimensions = TransformedFeatureDimensions;
@@ -81,33 +83,6 @@ class FeatureTransformer {
         write_little_endian<BiasType>(stream, biases, TransformedFeatureDimensions);
         return !stream.fail();
     }
-    //we start with non-ue
-    void compute_accumulators_from_scratch(const Position& pos, OutputType* acc) {
-        FeatureSet::IndexList white, black;
-        threats.append_active_psq<WHITE>(pos.byColorBB, pos.byTypeBB, pos.board, white);
-        threats.append_active_threats<WHITE>(pos.byColorBB, pos.byTypeBB, pos.board, white);
-        threats.append_active_psq<BLACK>(pos.byColorBB, pos.byTypeBB, pos.board, black);
-        threats.append_active_threats<BLACK>(pos.byColorBB, pos.byTypeBB, pos.board, black);
-        for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
-            acc[TransformedFeatureDimensions*pos.side_to_move()+j] = biases[j];
-        }
-        for (const auto index : white)
-        {
-            const IndexType offset = TransformedFeatureDimensions * index;
-            assert(offset < TransformedFeatureDimensions * InputDimensions);
-            for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
-                acc[TransformedFeatureDimensions*pos.side_to_move()+j] += weights[offset + j];
-        }
-        for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
-            acc[TransformedFeatureDimensions*(~pos.side_to_move())+j] = biases[j];
-        }
-        for (const auto index : black)
-        {
-            const IndexType offset = TransformedFeatureDimensions * index;
-            for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
-                acc[TransformedFeatureDimensions*(~pos.side_to_move())+j] += weights[offset + j];
-        }
-    }
     
 
     template<Color Perspective>
@@ -129,6 +104,8 @@ class FeatureTransformer {
                                                             removed);
         */
         threats.append_active_features<Perspective>(pos, features);
+        pos_loops++;
+        threat_loops += (int)features.size();
         for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
             accumulator.accumulation[Perspective][j] = biases[j];
         }
@@ -145,8 +122,8 @@ class FeatureTransformer {
     void update_accumulator_incremental(const Square     ksq,
                                         StateInfo*       target_state,
                                         const StateInfo* computed) {
-        [[maybe_unused]] constexpr bool Forward   = Direction == FORWARD;
-        [[maybe_unused]] constexpr bool Backwards = Direction == BACKWARDS;
+        //[[maybe_unused]] constexpr bool Forward   = Direction == FORWARD;
+        //[[maybe_unused]] constexpr bool Backwards = Direction == BACKWARDS;
         assert((computed->*accPtr).computed[Perspective]);
 
         StateInfo* next = Forward ? computed->next : computed->previous;
@@ -173,6 +150,7 @@ class FeatureTransformer {
         threats.append_active_threats<Perspective>(computed->colorBB, computed->pieceBB, computed->board, oldfeatures);
         threats.append_active_psq<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
         threats.append_active_threats<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
+        pos_loops += 2;
         write_difference(oldfeatures, newfeatures, removed, added);
         if (removed.size() == 0 && added.size() == 0)
         {
@@ -181,6 +159,8 @@ class FeatureTransformer {
                         TransformedFeatureDimensions * sizeof(BiasType));
         }
         else if (newfeatures.size() <= removed.size() + added.size()) {
+            acc_updates++;
+            threat_loops += (int)newfeatures.size();
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
                 (next->*accPtr).accumulation[Perspective][j] = biases[j];
             }
@@ -197,7 +177,9 @@ class FeatureTransformer {
             std::memcpy((next->*accPtr).accumulation[Perspective],
                         (computed->*accPtr).accumulation[Perspective],
                         TransformedFeatureDimensions * sizeof(BiasType));
-
+            acc_updates++;
+            threat_loops += (int)removed.size();
+            threat_loops += (int)added.size();
             // Difference calculation for the deactivated features
             for (const auto index : removed)
             {
@@ -234,14 +216,14 @@ class FeatureTransformer {
             if (!st->previous || st->previous->next != st)
             {
                 // compute accumulator from scratch for this position
-                update_accumulator_scratch<Perspective>(pos);
+                update_accumulator_scratch<Perspective>(pos);/*
                 if (st != pos.state())
                     // when computing an accumulator from scratch we can use it to
                     // efficiently compute the accumulator backwards, until we get to a king
                     // move. We expect that we will need these accumulators later anyway, so
                     // computing them now will save some work.
                     update_accumulator_incremental<Perspective, BACKWARDS>(
-                      pos.square<KING>(Perspective), st, pos.state());
+                      pos.square<KING>(Perspective), st, pos.state());*/
                 return;
             }
             st = st->previous;
