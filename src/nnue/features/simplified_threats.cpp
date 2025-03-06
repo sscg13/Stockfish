@@ -71,8 +71,8 @@ IndexType Simplified_Threats::make_index(Piece attkr, Square from, Square to, Pi
 
 // Get a list of indices for active features in ascending order
 template<Color Perspective>
-void Simplified_Threats::append_active_threats(const Position& pos, IndexList& active) {
-    Square ksq = pos.square<KING>(Perspective);
+void Simplified_Threats::append_active_threats(const Bitboard *colorBB, const Bitboard *pieceBB, IndexList& active) {
+    Square ksq = lsb(colorBB[Perspective] & pieceBB[KING]);
     Color order[2][2] = {{WHITE, BLACK}, {BLACK, WHITE}};
     std::vector<int> pieces;
     for (int i = WHITE; i <= BLACK; i++) {
@@ -80,7 +80,7 @@ void Simplified_Threats::append_active_threats(const Position& pos, IndexList& a
             Color c = order[Perspective][i];
             PieceType pt = PieceType(j);
             Piece attkr = make_piece(c, pt);
-            Bitboard bb  = pos.pieces(c, pt);
+            Bitboard bb  = colorBB[c] & pieceBB[pt];
             while (bb)
             {
                 Square from = pop_lsb(bb);
@@ -101,8 +101,8 @@ void Simplified_Threats::append_active_threats(const Position& pos, IndexList& a
 }
 
 template<Color Perspective>
-void Simplified_Threats::append_active_psq(const Position& pos, IndexList& active) {
-    Square   ksq = pos.square<KING>(Perspective);
+void Simplified_Threats::append_active_psq(const Bitboard *colorBB, const Bitboard *pieceBB, IndexList& active) {
+    Square ksq = lsb(colorBB[Perspective] & pieceBB[KING]);
     Bitboard bb  = pos.pieces();
     while (bb)
     {
@@ -113,10 +113,10 @@ void Simplified_Threats::append_active_psq(const Position& pos, IndexList& activ
 }
 
 // Explicit template instantiations
-template void Simplified_Threats::append_active_threats<WHITE>(const Position& pos, IndexList& active);
-template void Simplified_Threats::append_active_threats<BLACK>(const Position& pos, IndexList& active);
-template void Simplified_Threats::append_active_psq<WHITE>(const Position& pos, IndexList& active);
-template void Simplified_Threats::append_active_psq<BLACK>(const Position& pos, IndexList& active);
+template void Simplified_Threats::append_active_threats<WHITE>(const Bitboard *colorBB, const Bitboard *pieceBB, IndexList& active);
+template void Simplified_Threats::append_active_threats<BLACK>(const Bitboard *colorBB, const Bitboard *pieceBB, IndexList& active);
+template void Simplified_Threats::append_active_psq<WHITE>(const Bitboard *colorBB, const Bitboard *pieceBB, IndexList& active);
+template void Simplified_Threats::append_active_psq<BLACK>(const Bitboard *colorBB, const Bitboard *pieceBB, IndexList& active);
 template IndexType Simplified_Threats::make_index<WHITE>(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
 template IndexType Simplified_Threats::make_index<BLACK>(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
 /*

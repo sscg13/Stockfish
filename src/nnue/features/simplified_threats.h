@@ -111,16 +111,11 @@ class Simplified_Threats {
 
     // Get a list of indices for active features
     template<Color Perspective>
-    void append_active_threats(const Position& pos, IndexList& active);
+    void append_active_threats(const Bitboard *colorBB, const Bitboard *pieceBB, IndexList& active);
 
     template<Color Perspective>
-    void append_active_psq(const Position& pos, IndexList& active);
+    void append_active_psq(const Bitboard *colorBB, const Bitboard *pieceBB, IndexList& active);
     /*
-    // Get a list of indices for recently changed features
-    template<Color Perspective>
-    static void
-    append_changed_indices(Square ksq, const DirtyPiece& dp, IndexList& removed, IndexList& added);
-
     // Returns whether the change stored in this StateInfo means
     // that a full accumulator refresh is required.
     static bool requires_refresh(const StateInfo* st, Color perspective);

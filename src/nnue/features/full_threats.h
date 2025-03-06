@@ -18,8 +18,8 @@
 
 //Definition of input features Simplified_Threats of NNUE evaluation function
 
-#ifndef NNUE_FEATURES_SIMPLIFIED_THREATS_INCLUDED
-#define NNUE_FEATURES_SIMPLIFIED_THREATS_INCLUDED
+#ifndef NNUE_FEATURES_FULL_THREATS_INCLUDED
+#define NNUE_FEATURES_FULL_THREATS_INCLUDED
 
 #include <cstdint>
 
