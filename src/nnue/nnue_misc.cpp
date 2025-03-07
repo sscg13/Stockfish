@@ -156,7 +156,7 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
     return ss.str();
 }
 
-void write_difference(Features::Simplified_Threats::IndexList& a1, Features::Simplified_Threats::IndexList& b1, Features::Simplified_Threats::IndexList& a2, Features::Simplified_Threats::IndexList& b2) {
+void write_difference(const FeatureSet::IndexList& a1, const FeatureSet::IndexList& b1, FeatureSet::IndexList& a2, FeatureSet::IndexList& b2) {
     unsigned long long a = 0;
     unsigned long long b = 0;
     while (a < a1.size() && b < b1.size()) {

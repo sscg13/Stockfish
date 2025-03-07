@@ -94,15 +94,9 @@ class FeatureTransformer {
         // updates with more added/removed features than MaxActiveDimensions.
         // In this case, the maximum size of both feature addition and removal
         // is 2, since we are incrementally updating one move at a time.
-        FeatureSet::IndexList features;
         auto& accumulator = pos.state()->*accPtr;
-        /*
-        if constexpr (Forward)
-            FeatureSet::append_changed_indices<Perspective>(ksq, next->dirtyPiece, removed, added);
-        else
-            FeatureSet::append_changed_indices<Perspective>(ksq, computed->dirtyPiece, added,
-                                                            removed);
-        */
+        auto& features = pos.state()->features;
+        features.clear();
         threats.append_active_features<Perspective>(pos, features);
         acc_updates++;
         pos_loops++;
@@ -117,13 +111,13 @@ class FeatureTransformer {
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
                 accumulator.accumulation[Perspective][j] += weights[offset + j];
         }
+        accumulator.computed[Perspective] = true;
     }
 
     template<Color Perspective, IncUpdateDirection Direction = FORWARD>
     void update_accumulator_incremental(const Square     ksq,
                                         StateInfo*       target_state,
                                         const StateInfo* computed) {
-        std::cout << "Incremental used\n";
         [[maybe_unused]] constexpr bool Forward   = Direction == FORWARD;
         [[maybe_unused]] constexpr bool Backwards = Direction == BACKWARDS;
         assert((computed->*accPtr).computed[Perspective]);
@@ -140,7 +134,8 @@ class FeatureTransformer {
         // In this case, the maximum size of both feature addition and removal
         // is 2, since we are incrementally updating one move at a time.
         FeatureSet::IndexList removed, added;
-        FeatureSet::IndexList oldfeatures, newfeatures;
+        auto& oldfeatures = computed->features;
+        auto& newfeatures = target_state->features;
         /*
         if constexpr (Forward)
             FeatureSet::append_changed_indices<Perspective>(ksq, next->dirtyPiece, removed, added);
@@ -148,8 +143,7 @@ class FeatureTransformer {
             FeatureSet::append_changed_indices<Perspective>(ksq, computed->dirtyPiece, added,
                                                             removed);
         */
-        threats.append_active_psq<Perspective>(computed->colorBB, computed->pieceBB, computed->board, oldfeatures);
-        threats.append_active_threats<Perspective>(computed->colorBB, computed->pieceBB, computed->board, oldfeatures);
+        newfeatures.clear();
         threats.append_active_psq<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
         threats.append_active_threats<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
         pos_loops += 2;
