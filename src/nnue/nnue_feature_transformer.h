@@ -104,7 +104,7 @@ class FeatureTransformer {
         for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
             accumulator.accumulation[Perspective][j] = biases[j];
         }
-        for (const auto index : features)
+        for (auto index : features)
         {
             const IndexType offset = TransformedFeatureDimensions * index;
             assert(offset < TransformedFeatureDimensions * InputDimensions);
@@ -135,7 +135,7 @@ class FeatureTransformer {
         // is 2, since we are incrementally updating one move at a time.
         FeatureSet::IndexList removed, added;
         auto& oldfeatures = computed->features;
-        auto& newfeatures = target_state->features;
+        auto& newfeatures = next->features;
         /*
         if constexpr (Forward)
             FeatureSet::append_changed_indices<Perspective>(ksq, next->dirtyPiece, removed, added);
@@ -150,9 +150,9 @@ class FeatureTransformer {
         write_difference(oldfeatures, newfeatures, removed, added);
         if (removed.size() == 0 && added.size() == 0)
         {
-            std::memcpy((next->*accPtr).accumulation[Perspective],
-                        (computed->*accPtr).accumulation[Perspective],
-                        TransformedFeatureDimensions * sizeof(BiasType));
+            for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
+                (next->*accPtr).accumulation[Perspective][j] = (computed->*accPtr).accumulation[Perspective][j];
+            }
         }
         else if (newfeatures.size() <= removed.size() + added.size()) {
             acc_updates++;
@@ -170,9 +170,9 @@ class FeatureTransformer {
         }
         else
         {
-            std::memcpy((next->*accPtr).accumulation[Perspective],
-                        (computed->*accPtr).accumulation[Perspective],
-                        TransformedFeatureDimensions * sizeof(BiasType));
+            for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
+                (next->*accPtr).accumulation[Perspective][j] = (computed->*accPtr).accumulation[Perspective][j];
+            }
             acc_updates++;
             threat_loops += (int)removed.size();
             threat_loops += (int)added.size();
@@ -223,7 +223,7 @@ class FeatureTransformer {
                 return;
             }
             st = st->previous;
-        } while (!(st->*accPtr).computed[Perspective]);
+        } while (true);//while (!(st->*accPtr).computed[Perspective]);
         // Start from the oldest computed accumulator, update all the
         // accumulators up to the current position.
         update_accumulator_incremental<Perspective>(pos.square<KING>(Perspective), pos.state(), st);
