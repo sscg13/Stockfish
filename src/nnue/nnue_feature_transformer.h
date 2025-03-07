@@ -104,6 +104,7 @@ class FeatureTransformer {
                                                             removed);
         */
         threats.append_active_features<Perspective>(pos, features);
+        acc_updates++;
         pos_loops++;
         threat_loops += (int)features.size();
         for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
@@ -122,6 +123,7 @@ class FeatureTransformer {
     void update_accumulator_incremental(const Square     ksq,
                                         StateInfo*       target_state,
                                         const StateInfo* computed) {
+        std::cout << "Incremental used\n";
         [[maybe_unused]] constexpr bool Forward   = Direction == FORWARD;
         [[maybe_unused]] constexpr bool Backwards = Direction == BACKWARDS;
         assert((computed->*accPtr).computed[Perspective]);
@@ -228,7 +230,6 @@ class FeatureTransformer {
             }
             st = st->previous;
         } while (!(st->*accPtr).computed[Perspective]);
-
         // Start from the oldest computed accumulator, update all the
         // accumulators up to the current position.
         update_accumulator_incremental<Perspective>(pos.square<KING>(Perspective), pos.state(), st);
