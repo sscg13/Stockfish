@@ -54,7 +54,7 @@ class FeatureTransformer {
    public:
     // Output type
     using OutputType = TransformedFeatureType;
-    FeatureSet threats;
+    FeatureSet feature_indexer;
     int acc_updates = 0;
     int pos_loops = 0;
     int threat_loops = 0;
@@ -95,16 +95,26 @@ class FeatureTransformer {
         // In this case, the maximum size of both feature addition and removal
         // is 2, since we are incrementally updating one move at a time.
         auto& accumulator = pos.state()->*accPtr;
-        auto& features = pos.state()->features;
-        features.clear();
-        threats.append_active_features<Perspective>(pos, features);
+        auto& psq = pos.state()->psq;
+        auto& threats = pos.state()->threats;
+        psq.clear();
+        threats.clear();
+        feature_indexer.append_active_features<Perspective>(pos, psq, threats);
         acc_updates++;
         pos_loops++;
-        threat_loops += (int)features.size();
+        threat_loops += (int)psq.size();
+        threat_loops += (int)threats.size();
         for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
             accumulator.accumulation[Perspective][j] = biases[j];
         }
-        for (auto index : features)
+        for (auto index : psq)
+        {
+            const IndexType offset = TransformedFeatureDimensions * index;
+            assert(offset < TransformedFeatureDimensions * InputDimensions);
+            for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
+                accumulator.accumulation[Perspective][j] += weights[offset + j];
+        }
+        for (auto index : threats)
         {
             const IndexType offset = TransformedFeatureDimensions * index;
             assert(offset < TransformedFeatureDimensions * InputDimensions);
@@ -115,9 +125,7 @@ class FeatureTransformer {
     }
 
     template<Color Perspective, IncUpdateDirection Direction = FORWARD>
-    void update_accumulator_incremental(const Square     ksq,
-                                        StateInfo*       target_state,
-                                        const StateInfo* computed) {
+    void update_accumulator_incremental(const Square ksq, StateInfo* target_state, const StateInfo* computed) {
         [[maybe_unused]] constexpr bool Forward   = Direction == FORWARD;
         [[maybe_unused]] constexpr bool Backwards = Direction == BACKWARDS;
         assert((computed->*accPtr).computed[Perspective]);
@@ -134,40 +142,49 @@ class FeatureTransformer {
         // In this case, the maximum size of both feature addition and removal
         // is 2, since we are incrementally updating one move at a time.
         FeatureSet::IndexList removed, added;
-        auto& oldfeatures = computed->features;
-        auto& newfeatures = next->features;
-        /*
-        if constexpr (Forward)
-            FeatureSet::append_changed_indices<Perspective>(ksq, next->dirtyPiece, removed, added);
-        else
-            FeatureSet::append_changed_indices<Perspective>(ksq, computed->dirtyPiece, added,
-                                                            removed);
-        */
-        newfeatures.clear();
-        threats.append_active_psq<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
-        threats.append_active_threats<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
+        auto& oldthreats = computed->threats;
+        auto& newthreats = next->threats;
+        newthreats.clear();
+        //feature_indexer.append_active_psq<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
+        feature_indexer.append_active_threats<Perspective>(next->colorBB, next->pieceBB, next->board, newthreats);
         pos_loops += 2;
-        write_difference(oldfeatures, newfeatures, removed, added);
+
+        /*
+        FeatureSet::IndexList testthreats;
+        feature_indexer.append_active_threats<Perspective>(computed->colorBB, computed->pieceBB, computed->board, testthreats);
+        for (std::size_t i = 0; i < testthreats.size(); i++) {
+            assert(testthreats[i] == oldthreats[i]);
+        }
+        */
+
+        if constexpr (Forward)
+            feature_indexer.append_changed_indices<Perspective>(ksq, next->dirtyPiece, removed, added);
+        else
+            feature_indexer.append_changed_indices<Perspective>(ksq, computed->dirtyPiece, added, removed);
+        
+        write_difference(oldthreats, newthreats, removed, added);
+
+
         if (removed.size() == 0 && added.size() == 0)
         {
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
                 (next->*accPtr).accumulation[Perspective][j] = (computed->*accPtr).accumulation[Perspective][j];
             }
-        }
+        }/*
         else if (newfeatures.size() <= removed.size() + added.size()) {
             acc_updates++;
             threat_loops += (int)newfeatures.size();
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
                 (next->*accPtr).accumulation[Perspective][j] = biases[j];
             }
-            for (const auto index : newfeatures)
+            for (auto index : newfeatures)
             {
                 const IndexType offset = TransformedFeatureDimensions * index;
                 assert(offset < TransformedFeatureDimensions * InputDimensions);
                 for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
                     (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
             }
-        }
+        }*/
         else
         {
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
@@ -176,20 +193,19 @@ class FeatureTransformer {
             acc_updates++;
             threat_loops += (int)removed.size();
             threat_loops += (int)added.size();
-            // Difference calculation for the deactivated features
-            for (const auto index : removed)
-            {
-                const IndexType offset = TransformedFeatureDimensions * index;
-                for (IndexType i = 0; i < TransformedFeatureDimensions; ++i)
-                    (next->*accPtr).accumulation[Perspective][i] -= weights[offset + i];
-            }
-
             // Difference calculation for the activated features
-            for (const auto index : added)
+            for (auto index : added)
             {
                 const IndexType offset = TransformedFeatureDimensions * index;
                 for (IndexType i = 0; i < TransformedFeatureDimensions; ++i)
                     (next->*accPtr).accumulation[Perspective][i] += weights[offset + i];
+            }
+            // Difference calculation for the deactivated features
+            for (auto index : removed)
+            {
+                const IndexType offset = TransformedFeatureDimensions * index;
+                for (IndexType i = 0; i < TransformedFeatureDimensions; ++i)
+                    (next->*accPtr).accumulation[Perspective][i] -= weights[offset + i];
             }
         }
 
@@ -223,7 +239,7 @@ class FeatureTransformer {
                 return;
             }
             st = st->previous;
-        } while (true);//while (!(st->*accPtr).computed[Perspective]);
+        } while (!(st->*accPtr).computed[Perspective]);
         // Start from the oldest computed accumulator, update all the
         // accumulators up to the current position.
         update_accumulator_incremental<Perspective>(pos.square<KING>(Perspective), pos.state(), st);
