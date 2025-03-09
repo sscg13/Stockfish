@@ -20,10 +20,10 @@ int main(int argc, char* argv[]) {
     
     UCIEngine engin(argc, argv);
     std::vector<std::string> moves;
-    engin.engine.set_position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", moves);
+    engin.engine.set_position("bnr3k1/4qppp/3b1n2/1p6/2pP4/4PN2/1BQNBPPP/5RK1 w - - 2 17", moves);
     engin.engine.networks->big.featureTransformer->update_accumulator_scratch<WHITE>(engin.engine.pos);
     engin.engine.states->emplace_back();
-    engin.engine.pos.do_move(engin.to_move(engin.engine.pos, "e2e4"), engin.engine.states->back());
+    engin.engine.pos.do_move(engin.to_move(engin.engine.pos, "d2c4"), engin.engine.states->back());
     engin.engine.networks->big.featureTransformer->update_accumulator<WHITE>(engin.engine.pos);
     //bigft.update_accumulator_scratch<WHITE>(pos);
     /*

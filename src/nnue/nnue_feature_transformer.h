@@ -155,7 +155,8 @@ class FeatureTransformer {
         auto& newpsq = next->psq;
         newpsq.clear();
         feature_indexer.append_active_psq<Perspective>(next->colorBB, next->pieceBB, next->board, newpsq);
-        /*std::cout << "new psq features: ";
+        #ifndef NDEBUG
+        std::cout << "new psq features: ";
         for (auto index : newpsq) {
             std::cout << index << " ";
         }
@@ -163,7 +164,8 @@ class FeatureTransformer {
         for (auto index : newthreats) {
             std::cout << index << " ";
         }
-        std::cout << std::endl;*/
+        std::cout << std::endl;
+        #endif
         auto& oldpsq = computed->psq;
         /*for (std::size_t i = 0; i < newpsq.size() - 1; i++) {
             assert(newpsq[i+1] > newpsq[i]);
@@ -186,7 +188,8 @@ class FeatureTransformer {
             feature_indexer.append_changed_indices<Perspective>(ksq, computed->dirtyPiece, added, removed);
         */
         write_difference(oldthreats, newthreats, removed, added);
-        /*std::cout << "added features: ";
+        #ifndef NDEBUG
+        std::cout << "added features: ";
         for (auto index : added) {
             std::cout << index << " ";
         }
@@ -194,29 +197,40 @@ class FeatureTransformer {
         for (auto index : removed) {
             std::cout << index << " ";
         }
-        std::cout << std::endl;*/
-
+        std::cout << std::endl;
+        #endif
         if (removed.size() == 0 && added.size() == 0)
         {
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
                 (next->*accPtr).accumulation[Perspective][j] = (computed->*accPtr).accumulation[Perspective][j];
             }
-        }/*
-        else if (newfeatures.size() <= removed.size() + added.size()) {
+        }
+        /*
+        else if (newpsq.size() + newthreats.size() <= removed.size() + added.size()) {
             acc_updates++;
-            threat_loops += (int)newfeatures.size();
+            threat_loops += (int)newthreats.size();
+            threat_loops += (int)newpsq.size();
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
                 (next->*accPtr).accumulation[Perspective][j] = biases[j];
             }
-            for (auto index : newfeatures)
+            for (auto index : newpsq)
             {
                 const IndexType offset = TransformedFeatureDimensions * index;
                 assert(offset < TransformedFeatureDimensions * InputDimensions);
                 for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
                     (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
             }
-        }*/
-        /*else
+            for (auto index : newthreats)
+            {
+                const IndexType offset = TransformedFeatureDimensions * index;
+                assert(offset < TransformedFeatureDimensions * InputDimensions);
+                for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
+                    (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
+            }
+        }
+        */
+        /*
+        else
         {
             acc_updates++;
             threat_loops += (int)newthreats.size();
@@ -238,11 +252,30 @@ class FeatureTransformer {
                 for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
                     (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
             }
-        }*/
+        }
+        */
+        
         else
         {
-            for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
+            /*for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
                 (next->*accPtr).accumulation[Perspective][j] = (computed->*accPtr).accumulation[Perspective][j];
+            }*/
+            for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
+                (next->*accPtr).accumulation[Perspective][j] = biases[j];
+            }
+            for (auto index : oldpsq)
+            {
+                const IndexType offset = TransformedFeatureDimensions * index;
+                assert(offset < TransformedFeatureDimensions * InputDimensions);
+                for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
+                    (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
+            }
+            for (auto index : oldthreats)
+            {
+                const IndexType offset = TransformedFeatureDimensions * index;
+                assert(offset < TransformedFeatureDimensions * InputDimensions);
+                for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
+                    (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
             }
             acc_updates++;
             threat_loops += (int)removed.size();
@@ -251,18 +284,20 @@ class FeatureTransformer {
             for (auto index : added)
             {
                 const IndexType offset = TransformedFeatureDimensions * index;
-                for (IndexType i = 0; i < TransformedFeatureDimensions; ++i)
-                    (next->*accPtr).accumulation[Perspective][i] += weights[offset + i];
+                assert(offset < TransformedFeatureDimensions * InputDimensions);
+                for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
+                    (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
             }
             // Difference calculation for the deactivated features
             for (auto index : removed)
             {
                 const IndexType offset = TransformedFeatureDimensions * index;
-                for (IndexType i = 0; i < TransformedFeatureDimensions; ++i)
-                    (next->*accPtr).accumulation[Perspective][i] -= weights[offset + i];
+                assert(offset < TransformedFeatureDimensions * InputDimensions);
+                for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
+                    (next->*accPtr).accumulation[Perspective][j] -= weights[offset + j];
             }
         }
-
+        
         (next->*accPtr).computed[Perspective] = true;
 
         if (next != target_state)
