@@ -95,37 +95,30 @@ class FeatureTransformer {
         // In this case, the maximum size of both feature addition and removal
         // is 2, since we are incrementally updating one move at a time.
         auto& accumulator = pos.state()->*accPtr;
-        auto& psq = pos.state()->psq;
-        auto& threats = pos.state()->threats;
-        psq.clear();
-        threats.clear();
-        feature_indexer.append_active_features<Perspective>(pos, psq, threats);
+        auto& newfeatures = accumulator.features;
+        newfeatures.clear();
+        assert(newfeatures.size() == 0);
+        feature_indexer.append_active_features<Perspective>(pos, newfeatures, newfeatures);
         acc_updates++;
         pos_loops++;
-        threat_loops += (int)psq.size();
-        threat_loops += (int)threats.size();
+        threat_loops += (int)newfeatures.size();
         for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
             accumulator.accumulation[Perspective][j] = biases[j];
         }
-        std::cout << "psq features: ";
-        for (auto index : psq)
-        {
+        /*
+        std::cout << "features: ";
+        for (auto index : newfeatures) {
             std::cout << index << " ";
-            const IndexType offset = TransformedFeatureDimensions * index;
-            assert(offset < TransformedFeatureDimensions * InputDimensions);
-            for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
-                accumulator.accumulation[Perspective][j] += weights[offset + j];
-        }
-        std::cout << "\nthreat features: ";
-        for (auto index : threats)
-        {
-            std::cout << index << " ";
-            const IndexType offset = TransformedFeatureDimensions * index;
-            assert(offset < TransformedFeatureDimensions * InputDimensions);
-            for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
-                accumulator.accumulation[Perspective][j] += weights[offset + j];
         }
         std::cout << std::endl;
+        */
+        for (auto index : newfeatures)
+        {
+            const IndexType offset = TransformedFeatureDimensions * index;
+            assert(offset < TransformedFeatureDimensions * InputDimensions);
+            for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
+                accumulator.accumulation[Perspective][j] += weights[offset + j];
+        }
         accumulator.computed[Perspective] = true;
     }
 
@@ -147,33 +140,30 @@ class FeatureTransformer {
         // In this case, the maximum size of both feature addition and removal
         // is 2, since we are incrementally updating one move at a time.
         FeatureSet::IndexList removed, added;
-        auto& oldthreats = computed->threats;
-        auto& newthreats = next->threats;
-        newthreats.clear();
-        feature_indexer.append_active_threats<Perspective>(next->colorBB, next->pieceBB, next->board, newthreats);
+        removed.clear();
+        added.clear();
+        assert(removed.size() == 0);
+        assert(added.size() == 0);
+        auto& oldfeatures = (computed->*accPtr).features;
+        auto& newfeatures = (next->*accPtr).features;
+        newfeatures.clear();
+        assert(newfeatures.size() == 0);
+        feature_indexer.append_active_psq<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
+        feature_indexer.append_active_threats<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
         pos_loops += 2;
-        auto& newpsq = next->psq;
-        newpsq.clear();
-        feature_indexer.append_active_psq<Perspective>(next->colorBB, next->pieceBB, next->board, newpsq);
-        #ifndef NDEBUG
-        std::cout << "new psq features: ";
-        for (auto index : newpsq) {
-            std::cout << index << " ";
-        }
-        std::cout << "\nnew threat features: ";
-        for (auto index : newthreats) {
+        /*
+        std::cout << "new features: ";
+        for (auto index : newfeatures) {
             std::cout << index << " ";
         }
         std::cout << std::endl;
-        #endif
-        auto& oldpsq = computed->psq;
+        */
         /*for (std::size_t i = 0; i < newpsq.size() - 1; i++) {
             assert(newpsq[i+1] > newpsq[i]);
         }
         for (std::size_t i = 0; i < oldpsq.size() - 1; i++) {
             assert(oldpsq[i+1] > oldpsq[i]);
         }*/
-        write_difference(oldpsq, newpsq, removed, added);
         /*
         FeatureSet::IndexList testthreats;
         feature_indexer.append_active_threats<Perspective>(computed->colorBB, computed->pieceBB, computed->board, testthreats);
@@ -187,8 +177,8 @@ class FeatureTransformer {
         else
             feature_indexer.append_changed_indices<Perspective>(ksq, computed->dirtyPiece, added, removed);
         */
-        write_difference(oldthreats, newthreats, removed, added);
-        #ifndef NDEBUG
+        write_difference(oldfeatures, newfeatures, removed, added);
+        /*
         std::cout << "added features: ";
         for (auto index : added) {
             std::cout << index << " ";
@@ -198,7 +188,7 @@ class FeatureTransformer {
             std::cout << index << " ";
         }
         std::cout << std::endl;
-        #endif
+        */
         if (removed.size() == 0 && added.size() == 0)
         {
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
@@ -263,19 +253,15 @@ class FeatureTransformer {
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
                 (next->*accPtr).accumulation[Perspective][j] = biases[j];
             }
-            for (auto index : oldpsq)
+            for (auto index : oldfeatures)
             {
                 const IndexType offset = TransformedFeatureDimensions * index;
                 assert(offset < TransformedFeatureDimensions * InputDimensions);
                 for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
                     (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
             }
-            for (auto index : oldthreats)
-            {
-                const IndexType offset = TransformedFeatureDimensions * index;
-                assert(offset < TransformedFeatureDimensions * InputDimensions);
-                for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
-                    (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
+            for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
+                assert((next->*accPtr).accumulation[Perspective][j] == (computed->*accPtr).accumulation[Perspective][j]);
             }
             acc_updates++;
             threat_loops += (int)removed.size();

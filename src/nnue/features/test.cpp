@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <algorithm>
+#include <type_traits>
 
 
 #define private public
@@ -17,7 +18,9 @@ using namespace Stockfish;
 int main(int argc, char* argv[]) {
     Bitboards::init();
     Position::init();
-    
+    std::cout << std::is_trivial_v<Eval::NNUE::FeatureSet::IndexList> << std::endl;
+    std::cout << std::is_trivial_v<StateInfo> << std::endl;
+    std::cout << std::is_trivially_copyable_v<Eval::NNUE::IndexType> << std::endl;
     UCIEngine engin(argc, argv);
     std::vector<std::string> moves;
     engin.engine.set_position("bnr3k1/4qppp/3b1n2/1p6/2pP4/4PN2/1BQNBPPP/5RK1 w - - 2 17", moves);

@@ -628,6 +628,12 @@ Value Search::Worker::search(
     ValueList<Move, 32> capturesSearched;
     ValueList<Move, 32> quietsSearched;
 
+    capturesSearched.clear();
+    quietsSearched.clear();
+
+    assert(capturesSearched.size() == 0);
+    assert(quietsSearched.size() == 0);
+    
     // Step 1. Initialize node
     Worker* thisThread = this;
     ss->inCheck        = pos.checkers();

@@ -30,6 +30,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #define stringify2(x) #x
@@ -130,14 +131,14 @@ class ValueList {
    public:
     std::size_t size() const { return size_; }
     void        push_back(const T& value) { values_[size_++] = value; }
-    void        clear() { size_ = 0; }
+    void        clear() { size_ = 0ULL; }
     const T*    begin() const { return values_; }
     const T*    end() const { return values_ + size_; }
     const T&    operator[](int index) const { return values_[index]; }
 
    private:
     T           values_[MaxSize];
-    std::size_t size_ = 0;
+    std::size_t size_;
 };
 
 

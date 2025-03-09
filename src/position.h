@@ -67,8 +67,6 @@ struct StateInfo {
     Bitboard pieceBB[PIECE_NB];
     Piece board[SQUARE_NB];
     DirtyPiece dirtyPiece;
-    Eval::NNUE::FeatureSet::IndexList psq;
-    Eval::NNUE::FeatureSet::IndexList threats;
     Eval::NNUE::Accumulator<Eval::NNUE::TransformedFeatureDimensionsBig> accumulatorBig;
 };
 

@@ -35,6 +35,7 @@ using IndexType      = std::uint32_t;
 template<IndexType Size>
 struct alignas(CacheLineSize) Accumulator {
     std::int16_t accumulation[COLOR_NB][Size];
+    FeatureSet::IndexList features;
     bool         computed[COLOR_NB];
 };
 
