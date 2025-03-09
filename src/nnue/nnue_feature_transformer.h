@@ -107,20 +107,25 @@ class FeatureTransformer {
         for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
             accumulator.accumulation[Perspective][j] = biases[j];
         }
+        std::cout << "psq features: ";
         for (auto index : psq)
         {
+            std::cout << index << " ";
             const IndexType offset = TransformedFeatureDimensions * index;
             assert(offset < TransformedFeatureDimensions * InputDimensions);
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
                 accumulator.accumulation[Perspective][j] += weights[offset + j];
         }
+        std::cout << "\nthreat features: ";
         for (auto index : threats)
         {
+            std::cout << index << " ";
             const IndexType offset = TransformedFeatureDimensions * index;
             assert(offset < TransformedFeatureDimensions * InputDimensions);
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
                 accumulator.accumulation[Perspective][j] += weights[offset + j];
         }
+        std::cout << std::endl;
         accumulator.computed[Perspective] = true;
     }
 
@@ -145,10 +150,28 @@ class FeatureTransformer {
         auto& oldthreats = computed->threats;
         auto& newthreats = next->threats;
         newthreats.clear();
-        //feature_indexer.append_active_psq<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
         feature_indexer.append_active_threats<Perspective>(next->colorBB, next->pieceBB, next->board, newthreats);
         pos_loops += 2;
-
+        auto& newpsq = next->psq;
+        newpsq.clear();
+        feature_indexer.append_active_psq<Perspective>(next->colorBB, next->pieceBB, next->board, newpsq);
+        /*std::cout << "new psq features: ";
+        for (auto index : newpsq) {
+            std::cout << index << " ";
+        }
+        std::cout << "\nnew threat features: ";
+        for (auto index : newthreats) {
+            std::cout << index << " ";
+        }
+        std::cout << std::endl;*/
+        auto& oldpsq = computed->psq;
+        /*for (std::size_t i = 0; i < newpsq.size() - 1; i++) {
+            assert(newpsq[i+1] > newpsq[i]);
+        }
+        for (std::size_t i = 0; i < oldpsq.size() - 1; i++) {
+            assert(oldpsq[i+1] > oldpsq[i]);
+        }*/
+        write_difference(oldpsq, newpsq, removed, added);
         /*
         FeatureSet::IndexList testthreats;
         feature_indexer.append_active_threats<Perspective>(computed->colorBB, computed->pieceBB, computed->board, testthreats);
@@ -156,14 +179,22 @@ class FeatureTransformer {
             assert(testthreats[i] == oldthreats[i]);
         }
         */
-
+        /*
         if constexpr (Forward)
             feature_indexer.append_changed_indices<Perspective>(ksq, next->dirtyPiece, removed, added);
         else
             feature_indexer.append_changed_indices<Perspective>(ksq, computed->dirtyPiece, added, removed);
-        
+        */
         write_difference(oldthreats, newthreats, removed, added);
-
+        /*std::cout << "added features: ";
+        for (auto index : added) {
+            std::cout << index << " ";
+        }
+        std::cout << "\nremoved features: ";
+        for (auto index : removed) {
+            std::cout << index << " ";
+        }
+        std::cout << std::endl;*/
 
         if (removed.size() == 0 && added.size() == 0)
         {
@@ -178,6 +209,29 @@ class FeatureTransformer {
                 (next->*accPtr).accumulation[Perspective][j] = biases[j];
             }
             for (auto index : newfeatures)
+            {
+                const IndexType offset = TransformedFeatureDimensions * index;
+                assert(offset < TransformedFeatureDimensions * InputDimensions);
+                for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
+                    (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
+            }
+        }*/
+        /*else
+        {
+            acc_updates++;
+            threat_loops += (int)newthreats.size();
+            threat_loops += (int)newpsq.size();
+            for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
+                (next->*accPtr).accumulation[Perspective][j] = biases[j];
+            }
+            for (auto index : newpsq)
+            {
+                const IndexType offset = TransformedFeatureDimensions * index;
+                assert(offset < TransformedFeatureDimensions * InputDimensions);
+                for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
+                    (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
+            }
+            for (auto index : newthreats)
             {
                 const IndexType offset = TransformedFeatureDimensions * index;
                 assert(offset < TransformedFeatureDimensions * InputDimensions);

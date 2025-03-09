@@ -2,12 +2,14 @@
 #include <string>
 #include <algorithm>
 
-#include "simplified_threats.h"
+
+#define private public
 
 #include "../../bitboard.h"
 #include "../../position.h"
 #include "../../types.h"
 #include "../../uci.h"
+#include "../network.h"
 #include "../nnue_misc.h"
 
 using namespace Stockfish;
@@ -16,9 +18,15 @@ int main(int argc, char* argv[]) {
     Bitboards::init();
     Position::init();
     
-    Eval::NNUE::Features::Simplified_Threats test;
-
-    Position pos;
+    UCIEngine engin(argc, argv);
+    std::vector<std::string> moves;
+    engin.engine.set_position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", moves);
+    engin.engine.networks->big.featureTransformer->update_accumulator_scratch<WHITE>(engin.engine.pos);
+    engin.engine.states->emplace_back();
+    engin.engine.pos.do_move(engin.to_move(engin.engine.pos, "e2e4"), engin.engine.states->back());
+    engin.engine.networks->big.featureTransformer->update_accumulator<WHITE>(engin.engine.pos);
+    //bigft.update_accumulator_scratch<WHITE>(pos);
+    /*
     std::string fen1 = std::string(argv[1]);
     std::string fen2 = std::string(argv[2]);
     StateListPtr states;
@@ -71,6 +79,7 @@ int main(int argc, char* argv[]) {
     for (auto feature : black4) {
         std::cout << feature << ", ";
     }
+    */
     return 0;
 }
 
