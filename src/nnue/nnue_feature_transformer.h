@@ -248,32 +248,6 @@ class FeatureTransformer {
             }
         }
         */
-        /*
-        else
-        {
-            acc_updates++;
-            threat_loops += (int)newthreats.size();
-            threat_loops += (int)newpsq.size();
-            for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
-                (next->*accPtr).accumulation[Perspective][j] = biases[j];
-            }
-            for (auto index : newpsq)
-            {
-                const IndexType offset = TransformedFeatureDimensions * index;
-                assert(offset < TransformedFeatureDimensions * InputDimensions);
-                for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
-                    (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
-            }
-            for (auto index : newthreats)
-            {
-                const IndexType offset = TransformedFeatureDimensions * index;
-                assert(offset < TransformedFeatureDimensions * InputDimensions);
-                for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
-                    (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
-            }
-        }
-        */
-        
         else
         {
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
@@ -319,14 +293,14 @@ class FeatureTransformer {
             if (!st->previous || st->previous->next != st)
             {
                 // compute accumulator from scratch for this position
-                update_accumulator_scratch<Perspective>(pos);/*
+                update_accumulator_scratch<Perspective>(pos);
                 if (st != pos.state())
                     // when computing an accumulator from scratch we can use it to
                     // efficiently compute the accumulator backwards, until we get to a king
                     // move. We expect that we will need these accumulators later anyway, so
                     // computing them now will save some work.
                     update_accumulator_incremental<Perspective, BACKWARDS>(
-                      pos.square<KING>(Perspective), st, pos.state());*/
+                      pos.square<KING>(Perspective), st, pos.state());
                 return;
             }
             st = st->previous;
