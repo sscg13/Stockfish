@@ -56,18 +56,24 @@ class SCReLUAffine {
     }
 
     // Forward propagation
-    OutputType evaluate(const InputType* input, IndexType bucket) const {
+    OutputType evaluate(InputType* input, IndexType bucket) {
         assert(bucket < OutputBuckets);
         constexpr IndexType Start = 0;
         OutputType output = 255*(std::int32_t)biases[bucket];
+        for (IndexType i = Start; i < InputDimensions; i++) {
+            input[i] = std::min((std::int16_t)255, std::max(input[i], (std::int16_t)0));
+        }
+        for (IndexType i = Start; i < InputDimensions; i++) {
+            intermediate[i] = input[i]*weights[bucket*InputDimensions+i];
+        }
         for (IndexType i = Start; i < InputDimensions; ++i)
         {
-            output += std::min(255, std::max((int)input[i], 0))*std::min(255, std::max((int)input[i], 0))*(int)weights[bucket*InputDimensions+i];
+            output += (std::int32_t)(input[i])*(std::int32_t)(intermediate[i]);
         }
         return output / 255;
     }
 
-    
+    alignas(CacheLineSize) std::int16_t intermediate[InputDimensions];
     alignas(CacheLineSize) std::int16_t biases[OutputBuckets];
     alignas(CacheLineSize) std::int16_t weights[OutputBuckets * InputDimensions];
 };

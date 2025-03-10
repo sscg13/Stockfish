@@ -84,6 +84,33 @@ class FeatureTransformer {
         return !stream.fail();
     }
     
+    template<Color Perspective>
+    void print_accumulator(const Position& pos) {
+        auto& accumulator = pos.state()->*accPtr;
+        auto& newfeatures = accumulator.features;
+        newfeatures.clear();
+        assert(newfeatures.size() == 0);
+        feature_indexer.append_active_features<Perspective>(pos, newfeatures, newfeatures);
+        for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
+            accumulator.accumulation[Perspective][j] = biases[j];
+        }
+        std::cout << "features: ";
+        for (auto index : newfeatures) {
+            std::cout << index << " ";
+        }
+        std::cout << std::endl;
+        for (auto index : newfeatures)
+        {
+            const IndexType offset = TransformedFeatureDimensions * index;
+            assert(offset < TransformedFeatureDimensions * InputDimensions);
+            for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
+                accumulator.accumulation[Perspective][j] += weights[offset + j];
+        }
+        std::cout << "Accumulator values: ";
+        for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
+            std::cout << accumulator.accumulation[Perspective][j] << " ";
+        }
+    }
 
     template<Color Perspective>
     void update_accumulator_scratch(const Position& pos) {
@@ -95,7 +122,7 @@ class FeatureTransformer {
         // In this case, the maximum size of both feature addition and removal
         // is 2, since we are incrementally updating one move at a time.
         auto& accumulator = pos.state()->*accPtr;
-        auto& newfeatures = accumulator.features;
+        auto& newfeatures = (accumulator.features)[Perspective];
         newfeatures.clear();
         assert(newfeatures.size() == 0);
         feature_indexer.append_active_features<Perspective>(pos, newfeatures, newfeatures);
@@ -105,13 +132,6 @@ class FeatureTransformer {
         for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
             accumulator.accumulation[Perspective][j] = biases[j];
         }
-        /*
-        std::cout << "features: ";
-        for (auto index : newfeatures) {
-            std::cout << index << " ";
-        }
-        std::cout << std::endl;
-        */
         for (auto index : newfeatures)
         {
             const IndexType offset = TransformedFeatureDimensions * index;
@@ -144,8 +164,8 @@ class FeatureTransformer {
         added.clear();
         assert(removed.size() == 0);
         assert(added.size() == 0);
-        auto& oldfeatures = (computed->*accPtr).features;
-        auto& newfeatures = (next->*accPtr).features;
+        auto& oldfeatures = ((computed->*accPtr).features)[Perspective];
+        auto& newfeatures = ((next->*accPtr).features)[Perspective];
         newfeatures.clear();
         assert(newfeatures.size() == 0);
         feature_indexer.append_active_psq<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
@@ -247,21 +267,8 @@ class FeatureTransformer {
         
         else
         {
-            /*for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
+            for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
                 (next->*accPtr).accumulation[Perspective][j] = (computed->*accPtr).accumulation[Perspective][j];
-            }*/
-            for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
-                (next->*accPtr).accumulation[Perspective][j] = biases[j];
-            }
-            for (auto index : oldfeatures)
-            {
-                const IndexType offset = TransformedFeatureDimensions * index;
-                assert(offset < TransformedFeatureDimensions * InputDimensions);
-                for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
-                    (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
-            }
-            for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
-                assert((next->*accPtr).accumulation[Perspective][j] == (computed->*accPtr).accumulation[Perspective][j]);
             }
             acc_updates++;
             threat_loops += (int)removed.size();

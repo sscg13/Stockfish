@@ -44,7 +44,7 @@ struct NetworkArchitecture {
     static constexpr IndexType TransformedFeatureDimensions = L1;
     Layers::SCReLUAffine<TransformedFeatureDimensions * 2> output;
 
-    std::int32_t evaluate(const TransformedFeatureType* transformedFeatures, const int bucket) {
+    std::int32_t evaluate(TransformedFeatureType* transformedFeatures, const int bucket) {
       return output.evaluate(transformedFeatures, bucket);
     }
     // Read network parameters
