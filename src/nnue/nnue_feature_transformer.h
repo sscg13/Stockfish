@@ -256,21 +256,21 @@ class FeatureTransformer {
             acc_updates++;
             threat_loops += (int)removed.size();
             threat_loops += (int)added.size();
+
+            auto* acc_ptr = &((next->*accPtr).accumulation[Perspective][0]);
             // Difference calculation for the activated features
             for (auto index : added)
             {
-                const IndexType offset = TransformedFeatureDimensions * index;
-                assert(offset < TransformedFeatureDimensions * InputDimensions);
+                const auto* weight_ptr = &weights[TransformedFeatureDimensions * index];
                 for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
-                    (next->*accPtr).accumulation[Perspective][j] += weights[offset + j];
+                    acc_ptr[j] += weight_ptr[j];
             }
             // Difference calculation for the deactivated features
             for (auto index : removed)
             {
-                const IndexType offset = TransformedFeatureDimensions * index;
-                assert(offset < TransformedFeatureDimensions * InputDimensions);
+                const auto* weight_ptr = &weights[TransformedFeatureDimensions * index];
                 for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
-                    (next->*accPtr).accumulation[Perspective][j] -= weights[offset + j];
+                    acc_ptr[j] -= weight_ptr[j];
             }
         }
         
