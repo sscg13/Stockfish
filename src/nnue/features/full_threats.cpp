@@ -30,7 +30,6 @@ void Full_Threats::init_threat_offsets() {
     int pieceoffset = 0;
     PieceType piecetbl[PIECE_NB] = {NO_PIECE_TYPE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, NO_PIECE_TYPE,
     NO_PIECE_TYPE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, NO_PIECE_TYPE};
-    IndexType numvalidtargets[PIECE_NB] = {0, 6, 12, 10, 10, 12, 8, 0, 0, 6, 12, 10, 10, 12, 8, 0};
     for (int piece = 0; piece < 16; piece++) {
         if (piecetbl[piece] != NO_PIECE_TYPE) {
             threatoffsets[piece][65] = pieceoffset;
@@ -54,7 +53,8 @@ void Full_Threats::init_threat_offsets() {
 
 // Index of a feature for a given king position and another piece on some square
 template<Color Perspective>
-IndexType Full_Threats::make_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq) {
+std::optional<IndexType> Full_Threats::make_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq) {
+    std::cout << "try to make index\n";
     bool enemy = (color_of(attkr) != color_of(attkd));
     from = (Square)(int(from) ^ OrientTBL[Perspective][ksq]);
     to = (Square)(int(to) ^ OrientTBL[Perspective][ksq]);
@@ -65,13 +65,13 @@ IndexType Full_Threats::make_index(Piece attkr, Square from, Square to, Piece at
     if (from == to) {
         return IndexType(PieceSquareIndex[attkr]+from);
     }
+    if ((map[type_of(attkr)-1][type_of(attkd)-1] < 0) || (type_of(attkr) == type_of(attkd) && (enemy || type_of(attkr) != PAWN) && from < to)) {
+        return std::nullopt;
+    }
     Bitboard attacks = (type_of(attkr) == PAWN) ? pawn_attacks_bb(color_of(attkr), from) : attacks_bb(type_of(attkr), from, 0ULL);
-    return IndexType(768 + threatoffsets[attkr][65] + enemy*threatoffsets[attkr][64]
-                     + threatoffsets[attkr][from] + popcount((square_bb(to)-1) & attacks));
-}
-
-bool Full_Threats::is_duplicate(Piece attkr, Square from, Square to, Piece attkd) {
-    return false;
+    return IndexType(768 + threatoffsets[attkr][65] + 
+        (enemy*(numvalidtargets[attkr]/2)+map[type_of(attkr)-1][type_of(attkd)-1])*threatoffsets[attkr][64]
+    + threatoffsets[attkr][from] + popcount((square_bb(to)-1) & attacks));
 }
 
 // Get a list of indices for active features in ascending order
@@ -82,6 +82,7 @@ void Full_Threats::append_active_threats(const Position& pos, IndexList& active)
     std::vector<int> pieces;
     for (int i = WHITE; i <= BLACK; i++) {
         for (int j = PAWN; j <= KING; j++) {
+            std::cout << "piece " << j << " color " << i << "\n";
             Color c = order[Perspective][i];
             PieceType pt = PieceType(j);
             Piece attkr = make_piece(c, pt);
@@ -93,7 +94,10 @@ void Full_Threats::append_active_threats(const Position& pos, IndexList& active)
                 while (attacks) {
                     Square to = pop_lsb(attacks);
                     Piece attkd = pos.piece_on(to);
-                    pieces.push_back(make_index<Perspective>(attkr, from, to, attkd, ksq));
+                    std::optional<IndexType> index = make_index<Perspective>(attkr, from, to, attkd, ksq);
+                    if (index) {
+                        pieces.push_back(index.value());
+                    }
                 }
             }
             std::sort(pieces.begin(), pieces.end());
@@ -113,7 +117,10 @@ void Full_Threats::append_active_psq(const Position& pos, IndexList& active) {
     {
         Square s = pop_lsb(bb);
         Piece pc = pos.piece_on(s);
-        active.push_back(make_index<Perspective>(pc, s, s, pc, ksq));
+        std::optional<IndexType> index = make_index<Perspective>(pc, s, s, pc, ksq);
+        if (index) {
+            active.push_back(index.value());
+        }
     }
 }
 
@@ -122,8 +129,8 @@ template void Full_Threats::append_active_threats<WHITE>(const Position& pos, In
 template void Full_Threats::append_active_threats<BLACK>(const Position& pos, IndexList& active);
 template void Full_Threats::append_active_psq<WHITE>(const Position& pos, IndexList& active);
 template void Full_Threats::append_active_psq<BLACK>(const Position& pos, IndexList& active);
-template IndexType Full_Threats::make_index<WHITE>(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
-template IndexType Full_Threats::make_index<BLACK>(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
+template std::optional<IndexType> Full_Threats::make_index<WHITE>(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
+template std::optional<IndexType> Full_Threats::make_index<BLACK>(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
 /*
 // Get a list of indices for recently changed features
 template<Color Perspective>

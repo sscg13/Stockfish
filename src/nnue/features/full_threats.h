@@ -22,6 +22,7 @@
 #define NNUE_FEATURES_FULL_THREATS_INCLUDED
 
 #include <cstdint>
+#include <optional>
 
 #include "../../misc.h"
 #include "../../types.h"
@@ -63,7 +64,7 @@ class Full_Threats {
         PS_NONE, PS_B_PAWN, PS_B_KNIGHT, PS_B_BISHOP, PS_B_ROOK, PS_B_QUEEN, PS_B_KING, PS_NONE};
 
     
-    IndexType threatoffsets[PIECE_NB][SQUARE_NB+PIECE_NB+2];
+    IndexType threatoffsets[PIECE_NB][SQUARE_NB+2];
     void init_threat_offsets();
    public:
     // Feature name
@@ -97,20 +98,26 @@ class Full_Threats {
         SQ_A8, SQ_A8, SQ_A8, SQ_A8, SQ_H8, SQ_H8, SQ_H8, SQ_H8,
         SQ_A8, SQ_A8, SQ_A8, SQ_A8, SQ_H8, SQ_H8, SQ_H8, SQ_H8 }
     };
+    static constexpr int numvalidtargets[PIECE_NB] = {0, 6, 12, 10, 10, 12, 8, 0, 0, 6, 12, 10, 10, 12, 8, 0};
+    static constexpr int map[PIECE_TYPE_NB-2][PIECE_TYPE_NB-2] = {
+      {0, 1, -1, 2, -1, -1},
+      {0, 1, 2, 3, 4, 5},
+      {0, 1, 2, 3, -1, 4},
+      {0, 1, 2, 3, -1, 4},
+      {0, 1, 2, 3, 4, 5},
+      {0, 1, 2, 3, 0, 0}
+    };
     // clang-format on
-
     // Maximum number of simultaneously active features.
     static constexpr IndexType MaxActiveDimensions = 128;
     using IndexList                                = ValueList<IndexType, MaxActiveDimensions>;
 
 
     Full_Threats() { init_threat_offsets(); };
-    // Deduplicate
-    bool is_duplicate(Piece attkr, Square from, Square to, Piece attkd);
 
     // Index of a feature for a given king position and another piece on some square
     template<Color Perspective>
-    IndexType make_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
+    std::optional<IndexType> make_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
 
     // Get a list of indices for active features
     template<Color Perspective>
