@@ -55,6 +55,8 @@ class FeatureTransformer {
     // Output type
     using OutputType = TransformedFeatureType;
     FeatureSet feature_indexer;
+    FeatureSet::IndexList removed;
+    FeatureSet::IndexList added;
     int acc_updates = 0;
     int pos_loops = 0;
     int threat_loops = 0;
@@ -159,15 +161,11 @@ class FeatureTransformer {
         // updates with more added/removed features than MaxActiveDimensions.
         // In this case, the maximum size of both feature addition and removal
         // is 2, since we are incrementally updating one move at a time.
-        FeatureSet::IndexList removed, added;
         removed.clear();
         added.clear();
-        assert(removed.size() == 0);
-        assert(added.size() == 0);
         auto& oldfeatures = ((computed->*accPtr).features)[Perspective];
         auto& newfeatures = ((next->*accPtr).features)[Perspective];
         newfeatures.clear();
-        assert(newfeatures.size() == 0);
         feature_indexer.append_active_psq<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
         feature_indexer.append_active_threats<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
         pos_loops += 2;
