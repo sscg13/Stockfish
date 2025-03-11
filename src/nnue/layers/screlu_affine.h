@@ -56,19 +56,14 @@ class SCReLUAffine {
     }
 
     // Forward propagation
-    OutputType evaluate(InputType* input, IndexType bucket) {
+    OutputType evaluate(const InputType* input, IndexType bucket) {
         assert(bucket < OutputBuckets);
-        constexpr IndexType Start = 0;
-        OutputType output = 255*(std::int32_t)biases[bucket];
-        for (IndexType i = Start; i < InputDimensions; i++) {
-            input[i] = std::min((std::int16_t)255, std::max(input[i], (std::int16_t)0));
-        }
-        for (IndexType i = Start; i < InputDimensions; i++) {
-            intermediate[i] = input[i]*weights[bucket*InputDimensions+i];
-        }
-        for (IndexType i = Start; i < InputDimensions; ++i)
-        {
-            output += (std::int32_t)(input[i])*(std::int32_t)(intermediate[i]);
+        const IndexType weightOffset = bucket * InputDimensions;
+        const auto* weights_ptr = &(weights[weightOffset]);
+        OutputType output = 255 * static_cast<OutputType>(biases[bucket]);
+        for (IndexType i = 0; i < InputDimensions; i++) {
+            const InputType clipped = std::clamp(input[i], static_cast<InputType>(0), static_cast<InputType>(255));
+            output += clipped * clipped * weights_ptr[i];
         }
         return output / 255;
     }
