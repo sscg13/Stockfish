@@ -22,6 +22,7 @@
 #define NNUE_FEATURES_SIMPLIFIED_THREATS_INCLUDED
 
 #include <cstdint>
+#include <vector>
 
 #include "../../misc.h"
 #include "../../types.h"
@@ -102,6 +103,9 @@ class Simplified_Threats {
     // Maximum number of simultaneously active features.
     static constexpr IndexType MaxActiveDimensions = 128;
     using IndexList                                = ValueList<IndexType, MaxActiveDimensions>;
+
+    //Use this for storing intermediate features
+    std::vector<IndexType> indices;
 
 
     Simplified_Threats() { init_threat_offsets(); };

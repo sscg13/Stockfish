@@ -27,6 +27,7 @@
 namespace Stockfish::Eval::NNUE::Features {
 //lookup array for indexing threats
 void Simplified_Threats::init_threat_offsets() {
+    indices.reserve(16);
     int pieceoffset = 0;
     PieceType piecetbl[PIECE_NB] = {NO_PIECE_TYPE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, NO_PIECE_TYPE,
     NO_PIECE_TYPE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, NO_PIECE_TYPE};
@@ -74,7 +75,6 @@ template<Color Perspective>
 void Simplified_Threats::append_active_threats(const Bitboard *colorBB, const Bitboard *pieceBB, const Piece *board, IndexList& active) {
     Square ksq = lsb(colorBB[Perspective] & pieceBB[KING]);
     Color order[2][2] = {{WHITE, BLACK}, {BLACK, WHITE}};
-    std::vector<int> pieces;
     Bitboard occupied = colorBB[WHITE] | colorBB[BLACK];
     for (int i = WHITE; i <= BLACK; i++) {
         for (int j = PAWN; j <= KING; j++) {
@@ -82,6 +82,7 @@ void Simplified_Threats::append_active_threats(const Bitboard *colorBB, const Bi
             PieceType pt = PieceType(j);
             Piece attkr = make_piece(c, pt);
             Bitboard bb  = colorBB[c] & pieceBB[pt];
+            indices.clear();
             while (bb)
             {
                 Square from = pop_lsb(bb);
@@ -89,14 +90,13 @@ void Simplified_Threats::append_active_threats(const Bitboard *colorBB, const Bi
                 while (attacks) {
                     Square to = pop_lsb(attacks);
                     Piece attkd = board[to];
-                    pieces.push_back(make_index<Perspective>(attkr, from, to, attkd, ksq));
+                    indices.push_back(make_index<Perspective>(attkr, from, to, attkd, ksq));
                 }
             }
-            std::sort(pieces.begin(), pieces.end());
-            for (auto threat : pieces) {
+            std::sort(indices.begin(), indices.end());
+            for (auto threat : indices) {
                 active.push_back(threat);
             }
-            pieces.clear();
         }
     }
 }
@@ -105,23 +105,22 @@ template<Color Perspective>
 void Simplified_Threats::append_active_psq(const Bitboard *colorBB, const Bitboard *pieceBB, const Piece *board, IndexList& active) {
     Square ksq = lsb(colorBB[Perspective] & pieceBB[KING]);
     Color order[2][2] = {{WHITE, BLACK}, {BLACK, WHITE}};
-    std::vector<int> pieces;
     for (int i = WHITE; i <= BLACK; i++) {
         for (int j = PAWN; j <= KING; j++) {
             Color c = order[Perspective][i];
             PieceType pt = PieceType(j);
             Piece pc = make_piece(c, pt);
             Bitboard bb  = colorBB[c] & pieceBB[pt];
+            indices.clear();
             while (bb)
             {
                 Square s = pop_lsb(bb);
-                pieces.push_back(make_index<Perspective>(pc, s, s, pc, ksq));
+                indices.push_back(make_index<Perspective>(pc, s, s, pc, ksq));
             }
-            std::sort(pieces.begin(), pieces.end());
-            for (auto threat : pieces) {
+            std::sort(indices.begin(), indices.end());
+            for (auto threat : indices) {
                 active.push_back(threat);
             }
-            pieces.clear();
         }
     }
 }
