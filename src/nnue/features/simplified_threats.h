@@ -121,7 +121,7 @@ class Simplified_Threats {
     void append_active_psq(const Bitboard *colorBB, const Bitboard *pieceBB, const Piece *board, IndexList& active);
 
     template<Color Perspective>
-    void append_active_features(const Position& pos, IndexList& psq, IndexList& threats);
+    void append_active_features(const Bitboard *colorBB, const Bitboard *pieceBB, const Piece *board, IndexList& psq, IndexList& threats);
 
     // Get a list of indices for recently changed features
     template<Color Perspective>

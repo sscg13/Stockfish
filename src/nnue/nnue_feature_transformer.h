@@ -127,7 +127,7 @@ class FeatureTransformer {
         auto& newfeatures = (accumulator.features)[Perspective];
         newfeatures.clear();
         added.clear();
-        feature_indexer.append_active_features<Perspective>(pos, added, newfeatures);
+        feature_indexer.append_active_features<Perspective>(pos.byColorBB, pos.byTypeBB, pos.board, added, newfeatures);
         acc_updates++;
         pos_loops++;
         threat_loops += (int)newfeatures.size();
