@@ -103,13 +103,26 @@ void Simplified_Threats::append_active_threats(const Bitboard *colorBB, const Bi
 
 template<Color Perspective>
 void Simplified_Threats::append_active_psq(const Bitboard *colorBB, const Bitboard *pieceBB, const Piece *board, IndexList& active) {
-    Square   ksq = lsb(colorBB[Perspective] & pieceBB[KING]);
-    Bitboard bb  = (colorBB[WHITE] | colorBB[BLACK]);
-    while (bb)
-    {
-        Square s = pop_lsb(bb);
-        Piece pc = board[s];
-        active.push_back(make_index<Perspective>(pc, s, s, pc, ksq));
+    Square ksq = lsb(colorBB[Perspective] & pieceBB[KING]);
+    Color order[2][2] = {{WHITE, BLACK}, {BLACK, WHITE}};
+    std::vector<int> pieces;
+    for (int i = WHITE; i <= BLACK; i++) {
+        for (int j = PAWN; j <= KING; j++) {
+            Color c = order[Perspective][i];
+            PieceType pt = PieceType(j);
+            Piece pc = make_piece(c, pt);
+            Bitboard bb  = colorBB[c] & pieceBB[pt];
+            while (bb)
+            {
+                Square s = pop_lsb(bb);
+                pieces.push_back(make_index<Perspective>(pc, s, s, pc, ksq));
+            }
+            std::sort(pieces.begin(), pieces.end());
+            for (auto threat : pieces) {
+                active.push_back(threat);
+            }
+            pieces.clear();
+        }
     }
 }
 

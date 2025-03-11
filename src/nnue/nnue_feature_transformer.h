@@ -125,28 +125,19 @@ class FeatureTransformer {
         auto& newfeatures = (accumulator.features)[Perspective];
         newfeatures.clear();
         assert(newfeatures.size() == 0);
-        FeatureSet::IndexList psq;
-        psq.clear();
-        feature_indexer.append_active_features<Perspective>(pos, psq, newfeatures);
+        feature_indexer.append_active_features<Perspective>(pos, newfeatures, newfeatures);
         acc_updates++;
         pos_loops++;
         threat_loops += (int)newfeatures.size();
         for (IndexType j = 0; j < TransformedFeatureDimensions; j++) {
             accumulator.accumulation[Perspective][j] = biases[j];
         }
-        for (auto index : psq)
-        {
-            const IndexType offset = TransformedFeatureDimensions * index;
-            assert(offset < TransformedFeatureDimensions * InputDimensions);
-            for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
-                accumulator.accumulation[Perspective][j] += weights[offset + j];
-        }
+        auto* acc_ptr = &(accumulator.accumulation[Perspective][0]);
         for (auto index : newfeatures)
         {
-            const IndexType offset = TransformedFeatureDimensions * index;
-            assert(offset < TransformedFeatureDimensions * InputDimensions);
+            const auto* weight_ptr = &weights[TransformedFeatureDimensions * index];
             for (IndexType j = 0; j < TransformedFeatureDimensions; j++)
-                accumulator.accumulation[Perspective][j] += weights[offset + j];
+                acc_ptr[j] += weight_ptr[j];
         }
         accumulator.computed[Perspective] = true;
     }
@@ -177,7 +168,7 @@ class FeatureTransformer {
         auto& newfeatures = ((next->*accPtr).features)[Perspective];
         newfeatures.clear();
         assert(newfeatures.size() == 0);
-        //feature_indexer.append_active_psq<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
+        feature_indexer.append_active_psq<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
         feature_indexer.append_active_threats<Perspective>(next->colorBB, next->pieceBB, next->board, newfeatures);
         pos_loops += 2;
         /*
@@ -200,12 +191,14 @@ class FeatureTransformer {
             assert(testthreats[i] == oldthreats[i]);
         }
         */
+        /*
         if constexpr (Forward) {
             feature_indexer.append_changed_indices<Perspective>(ksq, next->dirtyPiece, removed, added);
         }
         else {
             feature_indexer.append_changed_indices<Perspective>(ksq, computed->dirtyPiece, added, removed);
         }
+        */
         write_difference(oldfeatures, newfeatures, removed, added);
         /*
         std::cout << "added features: ";
