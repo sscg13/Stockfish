@@ -4,9 +4,9 @@
 #include <type_traits>
 
 
-//#define private public
+#define private public
 
-#include "full_threats.h"
+#include "simplified_threats.h"
 #include "../../bitboard.h"
 #include "../../position.h"
 #include "../../types.h"
@@ -19,19 +19,18 @@ using namespace Stockfish;
 int main(int argc, char* argv[]) {
     Bitboards::init();
     Position::init();
-    /*
     std::cout << std::is_trivial_v<Eval::NNUE::FeatureSet::IndexList> << std::endl;
     std::cout << std::is_trivial_v<StateInfo> << std::endl;
     std::cout << std::is_trivially_copyable_v<Eval::NNUE::IndexType> << std::endl;
     UCIEngine engin(argc, argv);
     std::vector<std::string> moves;
-    engin.engine.set_position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", moves);
+    engin.engine.set_position("r3kb1r/pp1npppp/5n2/3p4/3P1B2/2N1P3/Pq2NPPP/R2QK2R b KQkq - 1 9", moves);
     engin.engine.networks->big.featureTransformer->print_accumulator<WHITE>(engin.engine.pos);
     engin.engine.states->emplace_back();
-    engin.engine.pos.do_move(engin.to_move(engin.engine.pos, "c2c3"), engin.engine.states->back());
+    engin.engine.pos.do_move(engin.to_move(engin.engine.pos, "b2a3"), engin.engine.states->back());
     engin.engine.networks->big.featureTransformer->print_accumulator<WHITE>(engin.engine.pos);
-    */
     //bigft.update_accumulator_scratch<WHITE>(pos);
+    /*
     Position pos;
     Eval::NNUE::Features::Full_Threats test;
     std::string fen1 = std::string(argv[1]);
@@ -87,6 +86,7 @@ int main(int argc, char* argv[]) {
         std::cout << feature << ", ";
     }
     return 0;
+    */
 }
 
 

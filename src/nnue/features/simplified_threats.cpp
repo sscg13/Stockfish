@@ -156,6 +156,16 @@ void Simplified_Threats::append_changed_indices(Square            ksq,
         if (dp.to[i] != SQ_NONE)
             added.push_back(make_index<Perspective>(dp.piece[i], dp.to[i], dp.to[i], dp.piece[i], ksq));
     }
+    /*
+    std::cout << "removed indices\n";
+    for (auto index : removed) {
+        std::cout << index << " ";
+    }
+    std::cout << "\nadded indices\n";
+    for (auto index : added) {
+        std::cout << index << " ";
+    }
+    */
 }
 
 // Explicit template instantiations
@@ -167,11 +177,11 @@ template void Simplified_Threats::append_changed_indices<BLACK>(Square          
                                                          const DirtyPiece& dp,
                                                          IndexList&        removed,
                                                          IndexList&        added);
-/*
+
 bool Simplified_Threats::requires_refresh(const StateInfo* st, Color perspective) {
-    return st->dirtyPiece.piece[0] == make_piece(perspective, KING);
+    return (st->dirtyPiece.piece[0] == make_piece(perspective, KING)
+    && OrientTBL[perspective][st->dirtyPiece.from[0]] != OrientTBL[perspective][st->dirtyPiece.to[0]]);
 }
-*/
 }  // namespace Stockfish::Eval::NNUE::Features
 
 
