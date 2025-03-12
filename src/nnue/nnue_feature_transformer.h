@@ -55,8 +55,6 @@ class FeatureTransformer {
     // Output type
     using OutputType = TransformedFeatureType;
     FeatureSet feature_indexer;
-    FeatureSet::IndexList removed;
-    FeatureSet::IndexList added;
     int acc_updates = 0;
     int pos_loops = 0;
     int threat_loops = 0;
@@ -126,6 +124,7 @@ class FeatureTransformer {
         auto& accumulator = pos.state()->*accPtr;
         auto& newfeatures = (accumulator.features)[Perspective];
         newfeatures.clear();
+        FeatureSet::IndexList added;
         added.clear();
         feature_indexer.append_active_features<Perspective>(pos.byColorBB, pos.byTypeBB, pos.board, added, newfeatures);
         acc_updates++;
@@ -167,6 +166,7 @@ class FeatureTransformer {
         // updates with more added/removed features than MaxActiveDimensions.
         // In this case, the maximum size of both feature addition and removal
         // is 2, since we are incrementally updating one move at a time.
+        FeatureSet::IndexList added, removed;
         removed.clear();
         added.clear();
         auto& oldfeatures = ((computed->*accPtr).features)[Perspective];
