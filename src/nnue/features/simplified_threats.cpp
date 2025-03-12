@@ -84,14 +84,34 @@ void Simplified_Threats::append_active_threats(const Bitboard *colorBB, const Bi
             Piece attkr = make_piece(c, pt);
             Bitboard bb  = colorBB[c] & pieceBB[pt];
             indices.clear();
-            while (bb)
-            {
-                Square from = pop_lsb(bb);
-                Bitboard attacks = ((pt == PAWN) ? pawn_attacks_bb(c, from) : attacks_bb(pt, from, occupied)) & occupied;
-                while (attacks) {
-                    Square to = pop_lsb(attacks);
+            if (pt == PAWN) {
+                auto right = (c == WHITE) ? NORTH_EAST : SOUTH_WEST;
+                auto left = (c == WHITE) ? NORTH_WEST : SOUTH_EAST;
+                auto attacks_left = ((c == WHITE) ? shift<NORTH_EAST>(bb) : shift<SOUTH_WEST>(bb)) & occupied;
+                auto attacks_right = ((c == WHITE) ? shift<NORTH_WEST>(bb) : shift<SOUTH_EAST>(bb)) & occupied;
+                while (attacks_left) {
+                    Square to = pop_lsb(attacks_left);
+                    Square from = to - right;
                     Piece attkd = board[to];
                     indices.push_back(make_index<Perspective>(attkr, from, to, attkd, ksq));
+                }
+                while (attacks_right) {
+                    Square to = pop_lsb(attacks_right);
+                    Square from = to - left;
+                    Piece attkd = board[to];
+                    indices.push_back(make_index<Perspective>(attkr, from, to, attkd, ksq));
+                }
+            }
+            else {
+                while (bb)
+                {
+                    Square from = pop_lsb(bb);
+                    Bitboard attacks = ((pt == PAWN) ? pawn_attacks_bb(c, from) : attacks_bb(pt, from, occupied)) & occupied;
+                    while (attacks) {
+                        Square to = pop_lsb(attacks);
+                        Piece attkd = board[to];
+                        indices.push_back(make_index<Perspective>(attkr, from, to, attkd, ksq));
+                    }
                 }
             }
             std::sort(indices.begin(), indices.end());
@@ -141,15 +161,39 @@ void Simplified_Threats::append_active_features(const Bitboard *colorBB, const B
             Piece attkr = make_piece(c, pt);
             Bitboard bb  = colorBB[c] & pieceBB[pt];
             indices.clear();
-            while (bb)
-            {
-                Square from = pop_lsb(bb);
-                psq.push_back(make_index<Perspective>(attkr, from, from, attkr, ksq));
-                Bitboard attacks = ((pt == PAWN) ? pawn_attacks_bb(c, from) : attacks_bb(pt, from, occupied)) & occupied;
-                while (attacks) {
-                    Square to = pop_lsb(attacks);
+            if (pt == PAWN) {
+                auto right = (c == WHITE) ? NORTH_EAST : SOUTH_WEST;
+                auto left = (c == WHITE) ? NORTH_WEST : SOUTH_EAST;
+                auto attacks_left = ((c == WHITE) ? shift<NORTH_EAST>(bb) : shift<SOUTH_WEST>(bb)) & occupied;
+                auto attacks_right = ((c == WHITE) ? shift<NORTH_WEST>(bb) : shift<SOUTH_EAST>(bb)) & occupied;
+                while (attacks_left) {
+                    Square to = pop_lsb(attacks_left);
+                    Square from = to - right;
                     Piece attkd = board[to];
                     indices.push_back(make_index<Perspective>(attkr, from, to, attkd, ksq));
+                }
+                while (attacks_right) {
+                    Square to = pop_lsb(attacks_right);
+                    Square from = to - left;
+                    Piece attkd = board[to];
+                    indices.push_back(make_index<Perspective>(attkr, from, to, attkd, ksq));
+                }
+                while (bb) {
+                    Square from = pop_lsb(bb);
+                    psq.push_back(make_index<Perspective>(attkr, from, from, attkr, ksq));
+                }
+            }
+            else {
+                while (bb)
+                {
+                    Square from = pop_lsb(bb);
+                    psq.push_back(make_index<Perspective>(attkr, from, from, attkr, ksq));
+                    Bitboard attacks = ((pt == PAWN) ? pawn_attacks_bb(c, from) : attacks_bb(pt, from, occupied)) & occupied;
+                    while (attacks) {
+                        Square to = pop_lsb(attacks);
+                        Piece attkd = board[to];
+                        indices.push_back(make_index<Perspective>(attkr, from, to, attkd, ksq));
+                    }
                 }
             }
             std::sort(indices.begin(), indices.end());
