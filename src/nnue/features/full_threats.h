@@ -105,7 +105,7 @@ class Full_Threats {
       {0, 1, 2, 3, -1, 4},
       {0, 1, 2, 3, -1, 4},
       {0, 1, 2, 3, 4, 5},
-      {0, 1, 2, 3, 0, 0}
+      {0, 1, 2, 3, -1, -1}
     };
     // clang-format on
     // Maximum number of simultaneously active features.

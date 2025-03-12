@@ -6,7 +6,7 @@
 
 #define private public
 
-#include "simplified_threats.h"
+#include "full_threats.h"
 #include "../../bitboard.h"
 #include "../../position.h"
 #include "../../types.h"
@@ -19,6 +19,7 @@ using namespace Stockfish;
 int main(int argc, char* argv[]) {
     Bitboards::init();
     Position::init();
+    /*
     std::cout << std::is_trivial_v<Eval::NNUE::FeatureSet::IndexList> << std::endl;
     std::cout << std::is_trivial_v<StateInfo> << std::endl;
     std::cout << std::is_trivially_copyable_v<Eval::NNUE::IndexType> << std::endl;
@@ -30,7 +31,7 @@ int main(int argc, char* argv[]) {
     engin.engine.pos.do_move(engin.to_move(engin.engine.pos, "b2a3"), engin.engine.states->back());
     engin.engine.networks->big.featureTransformer->print_accumulator<WHITE>(engin.engine.pos);
     //bigft.update_accumulator_scratch<WHITE>(pos);
-    /*
+    */
     Position pos;
     Eval::NNUE::Features::Full_Threats test;
     std::string fen1 = std::string(argv[1]);
@@ -45,6 +46,14 @@ int main(int argc, char* argv[]) {
     Eval::NNUE::Features::Full_Threats::IndexList black3;
     Eval::NNUE::Features::Full_Threats::IndexList white4;
     Eval::NNUE::Features::Full_Threats::IndexList black4;
+    white1.clear();
+    white2.clear();
+    black1.clear();
+    black2.clear();
+    white3.clear();
+    white4.clear();
+    black3.clear();
+    black4.clear();
     pos.set(fen1, false, &states->back());
     test.append_active_threats<WHITE>(pos, white1);
     test.append_active_threats<BLACK>(pos, black1);
@@ -86,7 +95,6 @@ int main(int argc, char* argv[]) {
         std::cout << feature << ", ";
     }
     return 0;
-    */
 }
 
 

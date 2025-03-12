@@ -54,7 +54,6 @@ void Full_Threats::init_threat_offsets() {
 // Index of a feature for a given king position and another piece on some square
 template<Color Perspective>
 std::optional<IndexType> Full_Threats::make_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq) {
-    std::cout << "try to make index\n";
     bool enemy = (color_of(attkr) != color_of(attkd));
     from = (Square)(int(from) ^ OrientTBL[Perspective][ksq]);
     to = (Square)(int(to) ^ OrientTBL[Perspective][ksq]);
@@ -79,10 +78,9 @@ template<Color Perspective>
 void Full_Threats::append_active_threats(const Position& pos, IndexList& active) {
     Square ksq = pos.square<KING>(Perspective);
     Color order[2][2] = {{WHITE, BLACK}, {BLACK, WHITE}};
-    std::vector<int> pieces;
+    std::vector<IndexType> pieces;
     for (int i = WHITE; i <= BLACK; i++) {
         for (int j = PAWN; j <= KING; j++) {
-            std::cout << "piece " << j << " color " << i << "\n";
             Color c = order[Perspective][i];
             PieceType pt = PieceType(j);
             Piece attkr = make_piece(c, pt);
@@ -95,7 +93,7 @@ void Full_Threats::append_active_threats(const Position& pos, IndexList& active)
                     Square to = pop_lsb(attacks);
                     Piece attkd = pos.piece_on(to);
                     std::optional<IndexType> index = make_index<Perspective>(attkr, from, to, attkd, ksq);
-                    if (index) {
+                    if (index.has_value()) {
                         pieces.push_back(index.value());
                     }
                 }
@@ -118,7 +116,7 @@ void Full_Threats::append_active_psq(const Position& pos, IndexList& active) {
         Square s = pop_lsb(bb);
         Piece pc = pos.piece_on(s);
         std::optional<IndexType> index = make_index<Perspective>(pc, s, s, pc, ksq);
-        if (index) {
+        if (index.has_value()) {
             active.push_back(index.value());
         }
     }
