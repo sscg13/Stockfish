@@ -4,7 +4,7 @@
 #include <type_traits>
 
 
-#define private public
+//#define private public
 
 #include "full_threats.h"
 #include "../../bitboard.h"

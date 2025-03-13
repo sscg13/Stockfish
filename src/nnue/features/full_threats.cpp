@@ -62,14 +62,14 @@ std::optional<IndexType> Full_Threats::make_index(Piece attkr, Square from, Squa
         attkd = ~attkd;
     }
     if (from == to) {
-        return IndexType(PieceSquareIndex[attkr]+from);
+        return IndexType(79858+PieceSquareIndex[attkr]+from);
     }
     if ((map[type_of(attkr)-1][type_of(attkd)-1] < 0) || (type_of(attkr) == type_of(attkd) && (enemy || type_of(attkr) != PAWN) && from < to)) {
         return std::nullopt;
     }
     Bitboard attacks = (type_of(attkr) == PAWN) ? pawn_attacks_bb(color_of(attkr), from) : attacks_bb(type_of(attkr), from, 0ULL);
-    return IndexType(768 + threatoffsets[attkr][65] + 
-        (enemy*(numvalidtargets[attkr]/2)+map[type_of(attkr)-1][type_of(attkd)-1])*threatoffsets[attkr][64]
+    return IndexType(threatoffsets[attkr][65] + 
+        (color_of(attkd)*(numvalidtargets[attkr]/2)+map[type_of(attkr)-1][type_of(attkd)-1])*threatoffsets[attkr][64]
     + threatoffsets[attkr][from] + popcount((square_bb(to)-1) & attacks));
 }
 
