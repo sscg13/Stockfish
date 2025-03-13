@@ -55,8 +55,8 @@ int main(int argc, char* argv[]) {
     black3.clear();
     black4.clear();
     pos.set(fen1, false, &states->back());
-    test.append_active_threats<WHITE>(pos, white1);
-    test.append_active_threats<BLACK>(pos, black1);
+    test.append_active_threats<WHITE>(pos.byColorBB, pos.byTypeBB, pos.board, white1);
+    test.append_active_threats<BLACK>(pos.byColorBB, pos.byTypeBB, pos.board, black1);
     std::cout << "Position 1 " << white1.size() << " white perspective features:\n";
     for (auto feature : white1) {
         std::cout << feature << ", ";
@@ -66,8 +66,8 @@ int main(int argc, char* argv[]) {
         std::cout << feature << ", ";
     }
     pos.set(fen2, false, &states->back());
-    test.append_active_threats<WHITE>(pos, white2);
-    test.append_active_threats<BLACK>(pos, black2);
+    test.append_active_threats<WHITE>(pos.byColorBB, pos.byTypeBB, pos.board, white2);
+    test.append_active_threats<BLACK>(pos.byColorBB, pos.byTypeBB, pos.board, black2);
     std::cout << "\nPosition 2 " << white2.size() << " white perspective features:\n";
     for (auto feature : white2) {
         std::cout << feature << ", ";

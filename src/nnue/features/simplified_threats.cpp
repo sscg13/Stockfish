@@ -106,7 +106,7 @@ void Simplified_Threats::append_active_threats(const Bitboard *colorBB, const Bi
                 while (bb)
                 {
                     Square from = pop_lsb(bb);
-                    Bitboard attacks = ((pt == PAWN) ? pawn_attacks_bb(c, from) : attacks_bb(pt, from, occupied)) & occupied;
+                    Bitboard attacks = (attacks_bb(pt, from, occupied)) & occupied;
                     while (attacks) {
                         Square to = pop_lsb(attacks);
                         Piece attkd = board[to];

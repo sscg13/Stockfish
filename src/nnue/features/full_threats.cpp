@@ -50,59 +50,91 @@ void Full_Threats::init_threat_offsets() {
         }
     }
 }
-
+template<Color Perspective>
+IndexType Full_Threats::make_psq_index(Piece pc, Square sq, Square ksq) {
+    sq = (Square)(int(sq) ^ OrientTBL[Perspective][ksq]);
+    if (Perspective == BLACK) {
+        pc = ~pc;
+    }
+    return IndexType(79856+PieceSquareIndex[pc]+sq);
+}
 // Index of a feature for a given king position and another piece on some square
 template<Color Perspective>
-std::optional<IndexType> Full_Threats::make_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq) {
-    bool enemy = (color_of(attkr) != color_of(attkd));
+std::optional<IndexType> Full_Threats::make_threat_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq) {
+    bool enemy = ((attkr ^ attkd) & 8);
     from = (Square)(int(from) ^ OrientTBL[Perspective][ksq]);
     to = (Square)(int(to) ^ OrientTBL[Perspective][ksq]);
     if (Perspective == BLACK) {
         attkr = ~attkr;
         attkd = ~attkd;
     }
-    if (from == to) {
-        return IndexType(79858+PieceSquareIndex[attkr]+from);
-    }
     if ((map[type_of(attkr)-1][type_of(attkd)-1] < 0) || (type_of(attkr) == type_of(attkd) && (enemy || type_of(attkr) != PAWN) && from < to)) {
         return std::nullopt;
     }
     Bitboard attacks = (type_of(attkr) == PAWN) ? pawn_attacks_bb(color_of(attkr), from) : attacks_bb(type_of(attkr), from, 0ULL);
     return IndexType(threatoffsets[attkr][65] + 
-        (color_of(attkd)*(numvalidtargets[attkr]/2)+map[type_of(attkr)-1][type_of(attkd)-1])*threatoffsets[attkr][64]
+        ((attkd/8)*(numvalidtargets[attkr]/2)+map[type_of(attkr)-1][type_of(attkd)-1])*threatoffsets[attkr][64]
     + threatoffsets[attkr][from] + popcount((square_bb(to)-1) & attacks));
 }
 
 // Get a list of indices for active features in ascending order
 template<Color Perspective>
-void Full_Threats::append_active_threats(const Position& pos, IndexList& active) {
-    Square ksq = pos.square<KING>(Perspective);
+void Full_Threats::append_active_threats(const Bitboard *colorBB, const Bitboard *pieceBB, const Piece *board, IndexList& active) {
+    Square ksq = lsb(colorBB[Perspective] & pieceBB[KING]);
     Color order[2][2] = {{WHITE, BLACK}, {BLACK, WHITE}};
-    std::vector<IndexType> pieces;
+    Bitboard occupied = colorBB[WHITE] | colorBB[BLACK];
+    IndexList indices;
+
     for (int i = WHITE; i <= BLACK; i++) {
         for (int j = PAWN; j <= KING; j++) {
             Color c = order[Perspective][i];
             PieceType pt = PieceType(j);
             Piece attkr = make_piece(c, pt);
-            Bitboard bb  = pos.pieces(c, pt);
-            while (bb)
-            {
-                Square from = pop_lsb(bb);
-                Bitboard attacks = ((pt == PAWN) ? pawn_attacks_bb(c, from) : attacks_bb(pt, from, pos.pieces())) & pos.pieces();
-                while (attacks) {
-                    Square to = pop_lsb(attacks);
-                    Piece attkd = pos.piece_on(to);
-                    std::optional<IndexType> index = make_index<Perspective>(attkr, from, to, attkd, ksq);
+            Bitboard bb  = colorBB[c] & pieceBB[pt];
+            indices.clear();
+            if (pt == PAWN) {
+                auto right = (c == WHITE) ? NORTH_EAST : SOUTH_WEST;
+                auto left = (c == WHITE) ? NORTH_WEST : SOUTH_EAST;
+                auto attacks_left = ((c == WHITE) ? shift<NORTH_EAST>(bb) : shift<SOUTH_WEST>(bb)) & occupied;
+                auto attacks_right = ((c == WHITE) ? shift<NORTH_WEST>(bb) : shift<SOUTH_EAST>(bb)) & occupied;
+                while (attacks_left) {
+                    Square to = pop_lsb(attacks_left);
+                    Square from = to - right;
+                    Piece attkd = board[to];
+                    std::optional<IndexType> index = make_threat_index<Perspective>(attkr, from, to, attkd, ksq);
                     if (index.has_value()) {
-                        pieces.push_back(index.value());
+                        indices.push_back(index.value());
+                    }
+                }
+                while (attacks_right) {
+                    Square to = pop_lsb(attacks_right);
+                    Square from = to - left;
+                    Piece attkd = board[to];
+                    std::optional<IndexType> index = make_threat_index<Perspective>(attkr, from, to, attkd, ksq);
+                    if (index.has_value()) {
+                        indices.push_back(index.value());
                     }
                 }
             }
-            std::sort(pieces.begin(), pieces.end());
-            for (auto threat : pieces) {
+            else {
+                while (bb)
+                {
+                    Square from = pop_lsb(bb);
+                    Bitboard attacks = (attacks_bb(pt, from, occupied)) & occupied;
+                    while (attacks) {
+                        Square to = pop_lsb(attacks);
+                        Piece attkd = board[to];
+                        std::optional<IndexType> index = make_threat_index<Perspective>(attkr, from, to, attkd, ksq);
+                        if (index.has_value()) {
+                            indices.push_back(index.value());
+                        }   
+                    }
+                }
+            }
+            std::sort(indices.begin(), indices.end());
+            for (auto threat : indices) {
                 active.push_back(threat);
             }
-            pieces.clear();
         }
     }
 }
@@ -115,20 +147,86 @@ void Full_Threats::append_active_psq(const Position& pos, IndexList& active) {
     {
         Square s = pop_lsb(bb);
         Piece pc = pos.piece_on(s);
-        std::optional<IndexType> index = make_index<Perspective>(pc, s, s, pc, ksq);
-        if (index.has_value()) {
-            active.push_back(index.value());
+        active.push_back(make_psq_index<Perspective>(pc, s, ksq));
+    }
+}
+
+template<Color Perspective>
+void Full_Threats::append_active_features(const Bitboard *colorBB, const Bitboard *pieceBB, const Piece *board, IndexList& psq, IndexList& threats) {
+    Square ksq = lsb(colorBB[Perspective] & pieceBB[KING]);
+    Color order[2][2] = {{WHITE, BLACK}, {BLACK, WHITE}};
+    Bitboard occupied = colorBB[WHITE] | colorBB[BLACK];
+    IndexList indices;
+    for (int i = WHITE; i <= BLACK; i++) {
+        for (int j = PAWN; j <= KING; j++) {
+            Color c = order[Perspective][i];
+            PieceType pt = PieceType(j);
+            Piece attkr = make_piece(c, pt);
+            Bitboard bb  = colorBB[c] & pieceBB[pt];
+            indices.clear();
+            if (pt == PAWN) {
+                auto right = (c == WHITE) ? NORTH_EAST : SOUTH_WEST;
+                auto left = (c == WHITE) ? NORTH_WEST : SOUTH_EAST;
+                auto attacks_left = ((c == WHITE) ? shift<NORTH_EAST>(bb) : shift<SOUTH_WEST>(bb)) & occupied;
+                auto attacks_right = ((c == WHITE) ? shift<NORTH_WEST>(bb) : shift<SOUTH_EAST>(bb)) & occupied;
+                while (attacks_left) {
+                    Square to = pop_lsb(attacks_left);
+                    Square from = to - right;
+                    Piece attkd = board[to];
+                    std::optional<IndexType> index = make_threat_index<Perspective>(attkr, from, to, attkd, ksq);
+                    if (index.has_value()) {
+                        indices.push_back(index.value());
+                    }
+                }
+                while (attacks_right) {
+                    Square to = pop_lsb(attacks_right);
+                    Square from = to - left;
+                    Piece attkd = board[to];
+                    std::optional<IndexType> index = make_threat_index<Perspective>(attkr, from, to, attkd, ksq);
+                    if (index.has_value()) {
+                        indices.push_back(index.value());
+                    }
+                }
+                while (bb) {
+                    Square from = pop_lsb(bb);
+                    psq.push_back(make_psq_index<Perspective>(attkr, from, ksq));
+                }
+            }
+            else {
+                while (bb)
+                {
+                    Square from = pop_lsb(bb);
+                    psq.push_back(make_psq_index<Perspective>(attkr, from, ksq));
+                    Bitboard attacks = (attacks_bb(pt, from, occupied)) & occupied;
+                    while (attacks) {
+                        Square to = pop_lsb(attacks);
+                        Piece attkd = board[to];
+                        std::optional<IndexType> index = make_threat_index<Perspective>(attkr, from, to, attkd, ksq);
+                        if (index.has_value()) {
+                            indices.push_back(index.value());
+                        }
+                    }
+                }
+            }
+            std::sort(indices.begin(), indices.end());
+            for (auto threat : indices) {
+                threats.push_back(threat);
+            }
         }
     }
 }
 
 // Explicit template instantiations
-template void Full_Threats::append_active_threats<WHITE>(const Position& pos, IndexList& active);
-template void Full_Threats::append_active_threats<BLACK>(const Position& pos, IndexList& active);
+template void Full_Threats::append_active_threats<WHITE>(const Bitboard *colorBB, const Bitboard *pieceBB, const Piece *board, IndexList& active);
+template void Full_Threats::append_active_threats<BLACK>(const Bitboard *colorBB, const Bitboard *pieceBB, const Piece *board, IndexList& active);
 template void Full_Threats::append_active_psq<WHITE>(const Position& pos, IndexList& active);
 template void Full_Threats::append_active_psq<BLACK>(const Position& pos, IndexList& active);
-template std::optional<IndexType> Full_Threats::make_index<WHITE>(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
-template std::optional<IndexType> Full_Threats::make_index<BLACK>(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
+template void Full_Threats::append_active_features<WHITE>(const Bitboard *colorBB, const Bitboard *pieceBB, const Piece *board, IndexList& psq, IndexList& active);
+template void Full_Threats::append_active_features<BLACK>(const Bitboard *colorBB, const Bitboard *pieceBB, const Piece *board, IndexList& psq, IndexList& active);
+template IndexType Full_Threats::make_psq_index<WHITE>(Piece pc, Square sq, Square ksq);
+template IndexType Full_Threats::make_psq_index<BLACK>(Piece pc, Square sq, Square ksq);
+template std::optional<IndexType> Full_Threats::make_threat_index<WHITE>(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
+template std::optional<IndexType> Full_Threats::make_threat_index<BLACK>(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
 /*
 // Get a list of indices for recently changed features
 template<Color Perspective>

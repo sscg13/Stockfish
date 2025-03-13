@@ -117,24 +117,28 @@ class Full_Threats {
 
     // Index of a feature for a given king position and another piece on some square
     template<Color Perspective>
-    std::optional<IndexType> make_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
+    IndexType make_psq_index(Piece pc, Square sq, Square ksq);
+    
+    template<Color Perspective>
+    std::optional<IndexType> make_threat_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
 
     // Get a list of indices for active features
     template<Color Perspective>
-    void append_active_threats(const Position& pos, IndexList& active);
+    void append_active_threats(const Bitboard *colorBB, const Bitboard *pieceBB, const Piece *board, IndexList& active);
 
     template<Color Perspective>
     void append_active_psq(const Position& pos, IndexList& active);
-    /*
+
+    
+    template<Color Perspective>
+    void append_active_features(const Bitboard *colorBB, const Bitboard *pieceBB, const Piece *board, IndexList& psq, IndexList& threats);
+
     // Get a list of indices for recently changed features
     template<Color Perspective>
-    static void
-    append_changed_indices(Square ksq, const DirtyPiece& dp, IndexList& removed, IndexList& added);
-
+    void append_changed_indices(Square ksq, const DirtyPiece& dp, IndexList& removed, IndexList& added);
     // Returns whether the change stored in this StateInfo means
     // that a full accumulator refresh is required.
     static bool requires_refresh(const StateInfo* st, Color perspective);
-    */
 };
 
 }  // namespace Stockfish::Eval::NNUE::Features
