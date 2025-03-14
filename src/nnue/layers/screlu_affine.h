@@ -39,7 +39,7 @@ class SCReLUAffine {
 
     // Number of input/output dimensions
     static constexpr IndexType InputDimensions = InDims;
-    static constexpr IndexType OutputBuckets = 1;
+    static constexpr IndexType OutputBuckets = 8;
 
     // Read network parameters
     bool read_parameters(std::istream& stream) {

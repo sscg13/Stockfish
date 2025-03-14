@@ -257,6 +257,43 @@ bool Full_Threats::requires_refresh(const StateInfo* st, Color perspective) {
     return (st->dirtyPiece.piece[0] == make_piece(perspective, KING)
     && OrientTBL[perspective][st->dirtyPiece.from[0]] != OrientTBL[perspective][st->dirtyPiece.to[0]]);
 }
+
+
+template<Color Perspective>
+void Full_Threats::append_changed_threats(const StateInfo* st, IndexList& removed, IndexList& added) {
+    DirtyPiece dp = st->dirtyPiece;
+    bool castling = (dp.dirty_num == 2 && dp.to[0] != dp.from[1]);
+    if (castling) {
+        Square kfrom = dp.from[0];
+        Square kto = dp.to[0];
+        Square rfrom = dp.from[1];
+        Square rto = dp.to[1];
+
+    }
+    else {
+        Square ksq = lsb(st->colorBB[Perspective] & st->pieceBB[KING]);
+        Square from = dp.from[0];
+        Square to = dp.to[dp.dirty_num-1];
+        Bitboard occupied = st->colorBB[WHITE] | st->colorBB[BLACK];
+        
+        /*
+        for (int pt = PAWN; pt < KING; i++) {
+            if (pt == type_of(pc)) {
+
+            }
+            Bitboard attacks = ((pt == PAWN) ? pawn_attacks_bb(Perspective, from) : attacks_bb(type_of(pc), sq, occupied)) & occupied;
+            while (attacks) {
+                Square to = pop_lsb(attacks);
+                Piece attkd = board[to];
+                std::optional<IndexType> index = make_threat_index<Perspective>(attkr, from, to, attkd, ksq);
+                if (index.has_value()) {
+                    indices.push_back(index.value());
+                }
+            }
+        }*/
+    }
+    return;
+}
 }  // namespace Stockfish::Eval::NNUE::Features
 
 

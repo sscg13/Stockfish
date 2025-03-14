@@ -216,10 +216,10 @@ Network<Arch, Transformer>::evaluate(const Position& pos) const {
 #endif
 
     ASSERT_ALIGNED(transformedFeatures, alignment);
-    //const int bucket = (pos.count<ALL_PIECES>() - 1) / 4;
+    const int bucket = (pos.count<ALL_PIECES>() - 1) / 4;
     std::int16_t acc[2*TransformedFeatureDimensionsBig];
     featureTransformer->transform(pos, acc);
-    const int eval = network[0].evaluate(acc, 0);
+    const int eval = network[0].evaluate(acc, bucket);
     return static_cast<Value>(340 * eval / (255 * 64));
 }
 
@@ -341,7 +341,6 @@ template<typename Arch, typename Transformer>
 bool Network<Arch, Transformer>::read_parameters(std::istream& stream,
                                                  std::string&  netDescription) const {
     netDescription = "why does this exist";
-    std::cout << "start loading parameters\n";
     if (!Detail::read_parameters(stream, *featureTransformer)) {
         return false;
     }

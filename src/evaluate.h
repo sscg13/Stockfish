@@ -33,7 +33,7 @@ namespace Eval {
 // for the build process (profile-build and fishtest) to work. Do not change the
 // name of the macro or the location where this macro is defined, as it is used
 // in the Makefile/Fishtest.
-#define EvalFileDefaultNameBig "nn-2f2b7f959ee5.nnue"
+#define EvalFileDefaultNameBig "nn-a660a82f6a81.nnue"
 
 namespace NNUE {
 struct Networks;
