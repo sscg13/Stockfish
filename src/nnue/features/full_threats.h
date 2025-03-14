@@ -137,9 +137,9 @@ class Full_Threats {
     template<Color Perspective>
     void append_changed_indices(Square ksq, const DirtyPiece& dp, IndexList& removed, IndexList& added);
 
-    /*WIP*/
+    /*WIP
     template<Color Perspective>
-    void append_changed_threats(const StateInfo* st, IndexList& removed, IndexList& added);
+    void append_changed_threats(const StateInfo* st, IndexList& removed, IndexList& added);*/
     // Returns whether the change stored in this StateInfo means
     // that a full accumulator refresh is required.
     static bool requires_refresh(const StateInfo* st, Color perspective);

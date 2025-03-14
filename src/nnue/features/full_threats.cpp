@@ -258,7 +258,7 @@ bool Full_Threats::requires_refresh(const StateInfo* st, Color perspective) {
     && OrientTBL[perspective][st->dirtyPiece.from[0]] != OrientTBL[perspective][st->dirtyPiece.to[0]]);
 }
 
-
+/*WIP
 template<Color Perspective>
 void Full_Threats::append_changed_threats(const StateInfo* st, IndexList& removed, IndexList& added) {
     DirtyPiece dp = st->dirtyPiece;
@@ -275,8 +275,7 @@ void Full_Threats::append_changed_threats(const StateInfo* st, IndexList& remove
         Square from = dp.from[0];
         Square to = dp.to[dp.dirty_num-1];
         Bitboard occupied = st->colorBB[WHITE] | st->colorBB[BLACK];
-        
-        /*
+
         for (int pt = PAWN; pt < KING; i++) {
             if (pt == type_of(pc)) {
 
@@ -290,10 +289,10 @@ void Full_Threats::append_changed_threats(const StateInfo* st, IndexList& remove
                     indices.push_back(index.value());
                 }
             }
-        }*/
+        }
     }
     return;
-}
+}*/
 }  // namespace Stockfish::Eval::NNUE::Features
 
 
