@@ -76,7 +76,7 @@ class Full_Threats {
     // Number of feature dimensions
     // Simplified threats are indexed by (piece type)(enemy)(from)(to)
     // There are 7504 valid piece-from-to combinations (including color). Thus 7504*2+768 = 15776 inputs.
-    static constexpr IndexType Dimensions = 15776;
+    static constexpr IndexType Dimensions = 80624;
 
     // clang-format off
     // Orient a square according to perspective (rotates by 180 for black)
@@ -143,4 +143,4 @@ class Full_Threats {
 
 }  // namespace Stockfish::Eval::NNUE::Features
 
-#endif  // #ifndef NNUE_FEATURES_SIMPLIFIED_THREATS_INCLUDED
+#endif  // #ifndef NNUE_FEATURES_FULL_THREATS_INCLUDED

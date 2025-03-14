@@ -26,6 +26,7 @@
 #include <iosfwd>
 
 #include "features/half_ka_v2_hm.h"
+#include "features/full_threats.h"
 #include "features/simplified_threats.h"
 #include "layers/screlu_affine.h"
 #include "nnue_common.h"
@@ -33,7 +34,7 @@
 namespace Stockfish::Eval::NNUE {
 
 // Input features used in evaluation function
-using FeatureSet = Features::Simplified_Threats;
+using FeatureSet = Features::Full_Threats;
 
 // Number of input feature dimensions after conversion
 constexpr IndexType TransformedFeatureDimensionsBig = 256;

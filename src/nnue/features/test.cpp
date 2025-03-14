@@ -32,6 +32,7 @@ int main(int argc, char* argv[]) {
     engin.engine.networks->big.featureTransformer->print_accumulator<WHITE>(engin.engine.pos);
     //bigft.update_accumulator_scratch<WHITE>(pos);
     */
+    std::cout << "early debug print\n";
     Position pos;
     Eval::NNUE::Features::Full_Threats test;
     std::string fen1 = std::string(argv[1]);
@@ -55,6 +56,7 @@ int main(int argc, char* argv[]) {
     black3.clear();
     black4.clear();
     pos.set(fen1, false, &states->back());
+    std::cout << "set up stuff\n";
     test.append_active_threats<WHITE>(pos.byColorBB, pos.byTypeBB, pos.board, white1);
     test.append_active_threats<BLACK>(pos.byColorBB, pos.byTypeBB, pos.board, black1);
     std::cout << "Position 1 " << white1.size() << " white perspective features:\n";

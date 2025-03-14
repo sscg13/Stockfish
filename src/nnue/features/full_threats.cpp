@@ -16,7 +16,7 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-//Definition of input features Simplified_Threats of NNUE evaluation function
+//Definition of input features Full_Threats of NNUE evaluation function
 
 #include "full_threats.h"
 #include "../../bitboard.h"
@@ -227,36 +227,36 @@ template IndexType Full_Threats::make_psq_index<WHITE>(Piece pc, Square sq, Squa
 template IndexType Full_Threats::make_psq_index<BLACK>(Piece pc, Square sq, Square ksq);
 template std::optional<IndexType> Full_Threats::make_threat_index<WHITE>(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
 template std::optional<IndexType> Full_Threats::make_threat_index<BLACK>(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
-/*
+
 // Get a list of indices for recently changed features
 template<Color Perspective>
-void Simplified_Threats::append_changed_indices(Square            ksq,
+void Full_Threats::append_changed_indices(Square            ksq,
                                          const DirtyPiece& dp,
                                          IndexList&        removed,
                                          IndexList&        added) {
     for (int i = 0; i < dp.dirty_num; ++i)
     {
         if (dp.from[i] != SQ_NONE)
-            removed.push_back(make_index<Perspective>(dp.from[i], dp.piece[i], ksq));
+            removed.push_back(make_psq_index<Perspective>(dp.piece[i], dp.from[i], ksq));
         if (dp.to[i] != SQ_NONE)
-            added.push_back(make_index<Perspective>(dp.to[i], dp.piece[i], ksq));
+            added.push_back(make_psq_index<Perspective>(dp.piece[i], dp.to[i], ksq));
     }
 }
 
 // Explicit template instantiations
-template void Simplified_Threats::append_changed_indices<WHITE>(Square            ksq,
+template void Full_Threats::append_changed_indices<WHITE>(Square            ksq,
                                                          const DirtyPiece& dp,
                                                          IndexList&        removed,
                                                          IndexList&        added);
-template void Simplified_Threats::append_changed_indices<BLACK>(Square            ksq,
+template void Full_Threats::append_changed_indices<BLACK>(Square            ksq,
                                                          const DirtyPiece& dp,
                                                          IndexList&        removed,
                                                          IndexList&        added);
 
-bool Simplified_Threats::requires_refresh(const StateInfo* st, Color perspective) {
-    return st->dirtyPiece.piece[0] == make_piece(perspective, KING);
+bool Full_Threats::requires_refresh(const StateInfo* st, Color perspective) {
+    return (st->dirtyPiece.piece[0] == make_piece(perspective, KING)
+    && OrientTBL[perspective][st->dirtyPiece.from[0]] != OrientTBL[perspective][st->dirtyPiece.to[0]]);
 }
-*/
 }  // namespace Stockfish::Eval::NNUE::Features
 
 
