@@ -44,7 +44,7 @@ enum class EmbeddedNNUEType {
 
 template<typename Arch, typename Transformer>
 class Network {
-    static constexpr IndexType FTDimensions = Arch::TransformedFeatureDimensions;
+    static constexpr IndexType FTDimensions = 2*Arch::TransformedFeatureDimensions;
 
    public:
     Network(EvalFile file, EmbeddedNNUEType type) :
