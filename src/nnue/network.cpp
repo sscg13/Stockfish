@@ -216,7 +216,7 @@ Network<Arch, Transformer>::evaluate(const Position& pos) const {
 #endif
 
     ASSERT_ALIGNED(transformedFeatures, alignment);
-    const int bucket = (pos.count<ALL_PIECES>() - 1) / 4;
+    const int bucket = (pos.count<ALL_PIECES>() - 2) / 4;
     featureTransformer->transform(pos, transformedFeatures);
     const int eval = network[0].evaluate(transformedFeatures, bucket);
     return static_cast<Value>(340 * eval / (255 * 64));
