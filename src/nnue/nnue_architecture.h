@@ -37,7 +37,7 @@ namespace Stockfish::Eval::NNUE {
 using FeatureSet = Features::Full_Threats;
 
 // Number of input feature dimensions after conversion
-constexpr IndexType TransformedFeatureDimensionsBig = 256;
+constexpr IndexType TransformedFeatureDimensionsBig = 512;
 constexpr IndexType LayerStacks = 1;
 
 template<IndexType L1>
