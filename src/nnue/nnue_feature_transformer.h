@@ -316,7 +316,7 @@ class FeatureTransformer {
         read_leb_128<PSQTWeightType>(stream, psqtWeights, PSQTBuckets * InputDimensions);
 
         permute_weights();
-        scale_weights(true);
+        //scale_weights(true);
         return !stream.fail();
     }
 
@@ -324,14 +324,14 @@ class FeatureTransformer {
     bool write_parameters(std::ostream& stream) {
 
         unpermute_weights();
-        scale_weights(false);
+        //scale_weights(false);
 
         write_leb_128<BiasType>(stream, biases, HalfDimensions);
         write_leb_128<WeightType>(stream, weights, HalfDimensions * InputDimensions);
         write_leb_128<PSQTWeightType>(stream, psqtWeights, PSQTBuckets * InputDimensions);
 
         permute_weights();
-        scale_weights(true);
+        //scale_weights(true);
         return !stream.fail();
     }
 
