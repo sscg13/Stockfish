@@ -219,7 +219,7 @@ Network<Arch, Transformer>::evaluate(const Position& pos) const {
     const int bucket = (pos.count<ALL_PIECES>() - 2) / 4;
     featureTransformer->transform(pos, transformedFeatures);
     const int eval = network[0].evaluate(transformedFeatures, bucket);
-    return static_cast<Value>(340 * eval / (255 * 64));
+    return static_cast<Value>(400 * eval / (510 * 64));
 }
 
 template<typename Arch, typename Transformer>

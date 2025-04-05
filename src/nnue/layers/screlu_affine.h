@@ -60,12 +60,12 @@ class SCReLUAffine {
         assert(bucket < OutputBuckets);
         const IndexType weightOffset = bucket * InputDimensions;
         const auto* weights_ptr = &(weights[weightOffset]);
-        OutputType output = 255 * static_cast<OutputType>(biases[bucket]);
+        OutputType output = 510 * static_cast<OutputType>(biases[bucket]);
         for (IndexType i = 0; i < InputDimensions; i++) {
-            const InputType clipped = std::clamp(input[i], static_cast<InputType>(0), static_cast<InputType>(255));
+            const InputType clipped = std::clamp(input[i], static_cast<InputType>(0), static_cast<InputType>(510));
             output += clipped * clipped * weights_ptr[i];
         }
-        return output / 255;
+        return output / 510;
     }
 
     alignas(CacheLineSize) std::int16_t intermediate[InputDimensions];
