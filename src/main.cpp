@@ -33,6 +33,7 @@ int main(int argc, char* argv[]) {
 
     Bitboards::init();
     Position::init();
+    Eval::NNUE::Features::init_threat_offsets();
 
     UCIEngine uci(argc, argv);
 

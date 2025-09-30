@@ -627,6 +627,8 @@ Value Search::Worker::search(
     ss->moveCount = 0;
     bestValue     = -VALUE_INFINITE;
     maxValue      = VALUE_INFINITE;
+    capturesSearched.clear();
+    quietsSearched.clear();
 
     // Check for the available remaining time
     if (is_mainthread())

@@ -44,7 +44,6 @@ namespace Stockfish::Eval::NNUE {
 
 enum class EmbeddedNNUEType {
     BIG,
-    SMALL,
 };
 
 using NetworkOutput = std::tuple<Value, Value>;
@@ -111,24 +110,18 @@ class Network {
 };
 
 // Definitions of the network types
-using SmallFeatureTransformer = FeatureTransformer<TransformedFeatureDimensionsSmall>;
-using SmallNetworkArchitecture =
-  NetworkArchitecture<TransformedFeatureDimensionsSmall, L2Small, L3Small>;
 
 using BigFeatureTransformer  = FeatureTransformer<TransformedFeatureDimensionsBig>;
 using BigNetworkArchitecture = NetworkArchitecture<TransformedFeatureDimensionsBig, L2Big, L3Big>;
 
 using NetworkBig   = Network<BigNetworkArchitecture, BigFeatureTransformer>;
-using NetworkSmall = Network<SmallNetworkArchitecture, SmallFeatureTransformer>;
 
 
 struct Networks {
-    Networks(NetworkBig&& nB, NetworkSmall&& nS) :
-        big(std::move(nB)),
-        small(std::move(nS)) {}
+    Networks(NetworkBig&& nB) :
+        big(std::move(nB)) {}
 
     NetworkBig   big;
-    NetworkSmall small;
 };
 
 

@@ -72,5 +72,4 @@ fetch_network() {
   return 1
 }
 
-fetch_network EvalFileDefaultNameBig && \
-fetch_network EvalFileDefaultNameSmall
+fetch_network EvalFileDefaultNameBig

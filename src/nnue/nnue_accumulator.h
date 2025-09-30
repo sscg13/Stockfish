@@ -99,41 +99,32 @@ struct AccumulatorCaches {
     template<typename Networks>
     void clear(const Networks& networks) {
         big.clear(networks.big);
-        small.clear(networks.small);
     }
 
     Cache<TransformedFeatureDimensionsBig>   big;
-    Cache<TransformedFeatureDimensionsSmall> small;
 };
 
 
 struct AccumulatorState {
     Accumulator<TransformedFeatureDimensionsBig>   accumulatorBig;
-    Accumulator<TransformedFeatureDimensionsSmall> accumulatorSmall;
     DirtyPiece                                     dirtyPiece;
 
     template<IndexType Size>
     auto& acc() noexcept {
-        static_assert(Size == TransformedFeatureDimensionsBig
-                        || Size == TransformedFeatureDimensionsSmall,
+        static_assert(Size == TransformedFeatureDimensionsBig,
                       "Invalid size for accumulator");
 
         if constexpr (Size == TransformedFeatureDimensionsBig)
             return accumulatorBig;
-        else if constexpr (Size == TransformedFeatureDimensionsSmall)
-            return accumulatorSmall;
     }
 
     template<IndexType Size>
     const auto& acc() const noexcept {
-        static_assert(Size == TransformedFeatureDimensionsBig
-                        || Size == TransformedFeatureDimensionsSmall,
+        static_assert(Size == TransformedFeatureDimensionsBig,
                       "Invalid size for accumulator");
 
         if constexpr (Size == TransformedFeatureDimensionsBig)
             return accumulatorBig;
-        else if constexpr (Size == TransformedFeatureDimensionsSmall)
-            return accumulatorSmall;
     }
 
     void reset(const DirtyPiece& dp) noexcept;
