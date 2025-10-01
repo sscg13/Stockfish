@@ -22,7 +22,6 @@
 #define NNUE_FEATURES_FULL_THREATS_INCLUDED
 
 #include <cstdint>
-#include <optional>
 
 #include "../../misc.h"
 #include "../../types.h"
@@ -161,7 +160,7 @@ class Full_Threats {
     static IndexType make_psq_index(Square s, Piece pc, Square ksq);
     
     template<Color Perspective>
-    static std::optional<IndexType> make_threat_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
+    static IndexType make_threat_index(Piece attkr, Square from, Square to, Piece attkd, Square ksq);
 
     // Get a list of indices for active features
     template<Color Perspective>

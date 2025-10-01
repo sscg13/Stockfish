@@ -550,7 +550,7 @@ void update_accumulator_scratch(const FeatureTransformer<Dimensions>& featureTra
     {
         auto* accTile =
           reinterpret_cast<vec_t*>(&accumulator.accumulation[Perspective][j * Tiling::TileHeight]);
-        auto* entryTile = const_cast<vec_t*>(reinterpret_cast<const vec_t*>(&featureTransformer.biases[j * Tiling::TileHeight]));
+        auto* entryTile = reinterpret_cast<const vec_t*>(&featureTransformer.biases[j * Tiling::TileHeight]);
 
         for (IndexType k = 0; k < Tiling::NumRegs; ++k)
             acc[k] = entryTile[k];
@@ -596,7 +596,7 @@ void update_accumulator_scratch(const FeatureTransformer<Dimensions>& featureTra
         auto* accTilePsqt = reinterpret_cast<psqt_vec_t*>(
           &accumulator.psqtAccumulation[Perspective][j * Tiling::PsqtTileHeight]);
         auto* entryTilePsqt =
-          const_cast<psqt_vec_t*>(reinterpret_cast<const psqt_vec_t*>(&featureTransformer.psqtBiases[j * Tiling::PsqtTileHeight]));
+          reinterpret_cast<const psqt_vec_t*>(&featureTransformer.psqtBiases[j * Tiling::PsqtTileHeight]);
 
         for (IndexType k = 0; k < Tiling::NumPsqtRegs; ++k)
             psqt[k] = entryTilePsqt[k];
