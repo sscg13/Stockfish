@@ -151,6 +151,27 @@ class FeatureTransformer {
         read_leb_128<WeightType>(stream, weights, HalfDimensions * InputDimensions);
         read_leb_128<PSQTWeightType>(stream, psqtWeights, PSQTBuckets * InputDimensions);
 
+        /*
+        std::cout << "checking threat inputs L1 weight sanity...\n";
+        int totalweights = HalfDimensions * 79856;
+        int activeweights = 0;
+        for (int i = 0; i < 79856 * HalfDimensions; i++) {
+            if (weights[i] != 0) {
+                activeweights++;
+            }
+        }
+        std::cout << activeweights << " nonzero weights out of " << totalweights << " total...\n";
+
+        std::cout << "checking psq inputs L1 weight sanity...\n";
+        totalweights = HalfDimensions * 22528;
+        activeweights = 0;
+        for (int i = 0; i < 22528 * HalfDimensions; i++) {
+            if (weights[79856 * HalfDimensions + i] != 0) {
+                activeweights++;
+            }
+        }
+        std::cout << activeweights << " nonzero weights out of " << totalweights << " total...\n";*/
+
         permute_weights();
         scale_weights(true);
         return !stream.fail();
