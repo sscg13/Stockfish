@@ -25,7 +25,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <vector>
 
 #include "../types.h"
 #include "features/full_threats.h"
@@ -50,7 +49,7 @@ template<IndexType Size>
 struct alignas(CacheLineSize) Accumulator {
     std::int16_t               accumulation[COLOR_NB][Size];
     std::int32_t               psqtAccumulation[COLOR_NB][PSQTBuckets];
-    std::array<bool, COLOR_NB> computed;
+    std::array<bool, COLOR_NB> computed = {};
 };
 
 
@@ -73,8 +72,8 @@ struct AccumulatorCaches {
         struct alignas(CacheLineSize) Entry {
             BiasType       accumulation[Size];
             PSQTWeightType psqtAccumulation[PSQTBuckets];
-            Bitboard       byColorBB[COLOR_NB];
-            Bitboard       byTypeBB[PIECE_TYPE_NB];
+            Piece          pieces[SQUARE_NB];
+            Bitboard       pieceBB;
 
             // To initialize a refresh entry, we set all its bitboards empty,
             // so we put the biases in the accumulation, without any weights on top
