@@ -277,7 +277,7 @@ class FeatureTransformer {
             constexpr IndexType NumOutputChunks = HalfDimensions / 2 / OutputChunkSize;
 
             const vec_t Zero = vec_zero();
-            const vec_t One  = vec_set_16(255);
+            const vec_t One  = vec_set_16(127);
 
             const vec_t* in0 = reinterpret_cast<const vec_t*>(&(accumulation[perspectives[p]][0]));
             const vec_t* in1 =
@@ -357,8 +357,8 @@ class FeatureTransformer {
 
                     const vec_t sum0a = vec_slli_16(vec_max_16(vec_min_16(acc0a, One), Zero), shift);
                     const vec_t sum0b = vec_slli_16(vec_max_16(vec_min_16(acc0b, One), Zero), shift);
-                    const vec_t sum1a = vec_min_16(acc1a, One);
-                    const vec_t sum1b = vec_min_16(acc1b, One);
+                    const vec_t sum1a = vec_slli_16(vec_min_16(acc1a, One), 2);
+                    const vec_t sum1b = vec_slli_16(vec_min_16(acc1b, One), 2);
 
                     const vec_t pa = vec_mulhi_16(sum0a, sum1a);
                     const vec_t pb = vec_mulhi_16(sum0b, sum1b);
@@ -394,12 +394,12 @@ class FeatureTransformer {
                     BiasType sum0t = threatAccumulation[static_cast<int>(perspectives[p])][j + 0];
                     BiasType sum1t =
                     threatAccumulation[static_cast<int>(perspectives[p])][j + HalfDimensions / 2];
-                    sum0               = std::clamp<BiasType>(sum0 + sum0t, 0, 255);
-                    sum1               = std::clamp<BiasType>(sum1 + sum1t, 0, 255);
+                    sum0               = std::clamp<BiasType>(sum0 + sum0t, 0, 127);
+                    sum1               = std::clamp<BiasType>(sum1 + sum1t, 0, 127);
                 }
                 else {
-                    sum0               = std::clamp<BiasType>(sum0, 0, 255);
-                    sum1               = std::clamp<BiasType>(sum1, 0, 255);
+                    sum0               = std::clamp<BiasType>(sum0, 0, 127);
+                    sum1               = std::clamp<BiasType>(sum1, 0, 127);
                 }
                 output[offset + j] = static_cast<OutputType>(unsigned(sum0 * sum1) / 512);
             }
