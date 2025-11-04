@@ -153,7 +153,7 @@ class FeatureTransformer {
         {
             for (IndexType j = 0; j < ThreatInputDimensions; ++j)
             {
-                WeightType* w = &threatWeights[j * HalfDimensions];
+                ThreatWeightType* w = &threatWeights[j * HalfDimensions];
                 for (IndexType i = 0; i < HalfDimensions; ++i)
                     w[i] = read ? w[i] * 2 : w[i] / 2;
             }
@@ -204,7 +204,7 @@ class FeatureTransformer {
             read_leb_128<PSQTWeightType>(stream, psqtWeights, PSQTBuckets * InputDimensions);
         }
         permute_weights();
-        //scale_weights(true);
+        if (!use_threats) { scale_weights(true); }
 
         return !stream.fail();
     }
@@ -277,7 +277,7 @@ class FeatureTransformer {
             constexpr IndexType NumOutputChunks = HalfDimensions / 2 / OutputChunkSize;
 
             const vec_t Zero = vec_zero();
-            const vec_t One  = vec_set_16(127);
+            const vec_t One  = vec_set_16((2 - use_threats) * 127);
 
             const vec_t* in0 = reinterpret_cast<const vec_t*>(&(accumulation[perspectives[p]][0]));
             const vec_t* in1 =
@@ -355,13 +355,15 @@ class FeatureTransformer {
                     const vec_t acc1a = vec_add_16(in1[j * 2 + 0], tin1[j * 2 + 0]);
                     const vec_t acc1b = vec_add_16(in1[j * 2 + 1], tin1[j * 2 + 1]);
 
-                    const vec_t sum0a = vec_slli_16(vec_max_16(vec_min_16(acc0a, One), Zero), shift);
-                    const vec_t sum0b = vec_slli_16(vec_max_16(vec_min_16(acc0b, One), Zero), shift);
-                    const vec_t sum1a = vec_slli_16(vec_min_16(acc1a, One), 2);
-                    const vec_t sum1b = vec_slli_16(vec_min_16(acc1b, One), 2);
+                    const vec_t sum0a = vec_slli_16(vec_max_16(vec_min_16(acc0a, One), Zero), shift + 1);
+                    const vec_t sum0b = vec_slli_16(vec_max_16(vec_min_16(acc0b, One), Zero), shift + 1);
+                    const vec_t sum1a = vec_min_16(acc1a, One);
+                    const vec_t sum1b = vec_min_16(acc1b, One);
+                    const vec_t sum1c = vec_add_16(sum1a, sum1a);
+                    const vec_t sum1d = vec_add_16(sum1b, sum1b);
 
-                    const vec_t pa = vec_mulhi_16(sum0a, sum1a);
-                    const vec_t pb = vec_mulhi_16(sum0b, sum1b);
+                    const vec_t pa = vec_mulhi_16(sum0a, sum1c);
+                    const vec_t pb = vec_mulhi_16(sum0b, sum1d);
 
                     out[j] = vec_packus_16(pa, pb);
                 }
