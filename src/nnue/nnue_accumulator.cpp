@@ -418,6 +418,17 @@ void update_accumulator_refresh_cache(const FeatureTransformer<Dimensions>& feat
     auto& accumulator                 = accumulatorState.acc<Dimensions>();
     accumulator.computed[Perspective] = true;
 
+    std::cout << (Perspective ? "BLACK" : "WHITE") << " added: ";
+    for (auto feature: added) {
+        std::cout << feature << " ";
+    }
+    std::cout << "\n";
+    std::cout << "removed: ";
+    for (auto feature: removed) {
+        std::cout << feature << " ";
+    }
+    std::cout << "\n";
+
 #ifdef VECTOR
     vec_t      acc[Tiling::NumRegs];
     psqt_vec_t psqt[Tiling::NumPsqtRegs];
