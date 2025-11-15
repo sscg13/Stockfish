@@ -417,7 +417,7 @@ void update_accumulator_refresh_cache(const FeatureTransformer<Dimensions>& feat
 
     auto& accumulator                 = accumulatorState.acc<Dimensions>();
     accumulator.computed[Perspective] = true;
-
+    /*
     std::cout << (Perspective ? "BLACK" : "WHITE") << " added: ";
     for (auto feature: added) {
         std::cout << feature << " ";
@@ -427,7 +427,7 @@ void update_accumulator_refresh_cache(const FeatureTransformer<Dimensions>& feat
     for (auto feature: removed) {
         std::cout << feature << " ";
     }
-    std::cout << "\n";
+    std::cout << "\n";*/
 
 #ifdef VECTOR
     vec_t      acc[Tiling::NumRegs];

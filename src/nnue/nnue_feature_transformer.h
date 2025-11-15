@@ -150,7 +150,13 @@ class FeatureTransformer {
         read_leb_128<BiasType>(stream, biases, HalfDimensions);
         read_leb_128<WeightType>(stream, weights, HalfDimensions * InputDimensions);
         read_leb_128<PSQTWeightType>(stream, psqtWeights, PSQTBuckets * InputDimensions);
-
+        /*if (HalfDimensions == 3072) {
+            std::cout << "[";
+            for (int i = 0; i < 8; i++) {
+                std::cout << psqtWeights[8 * 20931 + i] << " ";
+            }
+            std::cout << "]\n";
+        }*/
         permute_weights();
         scale_weights(true);
         return !stream.fail();

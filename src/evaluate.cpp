@@ -108,15 +108,17 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
     auto [psqt, positional] = networks.big.evaluate(pos, *accumulators, &caches->big);
+    ss << "[psqt, positional] = [" << psqt << ", " << positional << "]\n";
     Value v                 = psqt + positional;
     v                       = pos.side_to_move() == WHITE ? v : -v;
     ss << "NNUE evaluation        " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)\n";
 
+    /*
     v = evaluate(networks, pos, *accumulators, *caches, VALUE_ZERO);
     v = pos.side_to_move() == WHITE ? v : -v;
     ss << "Final evaluation       " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)";
     ss << " [with scaled NNUE, ...]";
-    ss << "\n";
+    ss << "\n";*/
 
     return ss.str();
 }

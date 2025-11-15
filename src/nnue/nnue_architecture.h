@@ -118,18 +118,22 @@ struct NetworkArchitecture {
 #else
         alignas(CacheLineSize) static thread_local Buffer buffer;
 #endif
-
+        /*std::cout << "L1 (first 128): [";
+        for (int i = 0; i < 128; i++) {
+            std::cout << (int)transformedFeatures[i] << " ";
+        }
+        std::cout << "]\n";
         fc_0.propagate(transformedFeatures, buffer.fc_0_out);
         std::cout << "L2: [";
         for (int i = 0; i < FC_0_OUTPUTS; i++) {
             std::cout << (int)buffer.fc_0_out[i] << " ";
         }
-        std::cout << "]\n";
+        std::cout << "(" << (int)buffer.fc_0_out[FC_0_OUTPUTS] << ")]\n";*/
         ac_sqr_0.propagate(buffer.fc_0_out, buffer.ac_sqr_0_out);
         ac_0.propagate(buffer.fc_0_out, buffer.ac_0_out);
         std::memcpy(buffer.ac_sqr_0_out + FC_0_OUTPUTS, buffer.ac_0_out,
                     FC_0_OUTPUTS * sizeof(typename decltype(ac_0)::OutputType));
-        std::cout << "L2 CReLU(x^2): [";
+        /*std::cout << "L2 CReLU(x^2): [";
         for (int i = 0; i < FC_0_OUTPUTS; i++) {
             std::cout << (int)buffer.ac_sqr_0_out[i] << " ";
         }
@@ -137,25 +141,26 @@ struct NetworkArchitecture {
         for (int i = 0; i < FC_0_OUTPUTS; i++) {
             std::cout << (int)buffer.ac_sqr_0_out[i+FC_0_OUTPUTS] << " ";
         }
-        std::cout << "]\n";
+        std::cout << "]\n";*/
         fc_1.propagate(buffer.ac_sqr_0_out, buffer.fc_1_out);
-        std::cout << "L3: [";
+        /*std::cout << "L3: [";
         for (int i = 0; i < FC_1_OUTPUTS; i++) {
             std::cout << (int)buffer.fc_1_out[i] << " ";
         }
-        std::cout << "]\n";
+        std::cout << "]\n";*/
         ac_1.propagate(buffer.fc_1_out, buffer.ac_1_out);
-        std::cout << "L3 CReLU(x): [";
+        /*std::cout << "L3 CReLU(x): [";
         for (int i = 0; i < FC_1_OUTPUTS; i++) {
             std::cout << (int)buffer.ac_1_out[i] << " ";
         }
-        std::cout << "]\n";
+        std::cout << "]\n";*/
         fc_2.propagate(buffer.ac_1_out, buffer.fc_2_out);
 
         // buffer.fc_0_out[FC_0_OUTPUTS] is such that 1.0 is equal to 127*(1<<WeightScaleBits) in
         // quantized form, but we want 1.0 to be equal to 600*OutputScale
         std::int32_t fwdOut =
           (buffer.fc_0_out[FC_0_OUTPUTS]) * (600 * OutputScale) / (127 * (1 << WeightScaleBits));
+        //  std::cout << "[normal, skip] = [" << (int)buffer.fc_2_out[0] << " " << fwdOut << "]\n";
         std::int32_t outputValue = buffer.fc_2_out[0] + fwdOut;
 
         return outputValue;
