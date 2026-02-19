@@ -135,9 +135,10 @@ struct NetworkArchitecture {
         // quantized form, but we want 1.0 to be equal to 600*OutputScale
         std::int32_t fwdOut1 =
           (buffer.fc_0_out[FC_0_OUTPUTS]) * (600 * OutputScale) / (127 * (1 << WeightScaleBits));
-        std::int32_t fwdOut2 = 
-          (buffer.fc_1_out[FC_1_OUTPUTS - IsBigNet]) * (600 * OutputScale) / (127 * (1 << WeightScaleBits));
-        std::int32_t outputValue = buffer.fc_2_out[0] + fwdOut1 + (IsBigNet ? fwdOut2 : 0);
+        std::int32_t fwdOut2 = IsBigNet ?
+          (buffer.fc_1_out[FC_1_OUTPUTS]) * (600 * OutputScale) / (127 * (1 << WeightScaleBits))
+          : 0;
+        std::int32_t outputValue = buffer.fc_2_out[0] + fwdOut1 + fwdOut2;
 
         return outputValue;
     }
