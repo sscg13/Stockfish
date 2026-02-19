@@ -42,7 +42,7 @@ using PSQFeatureSet    = Features::HalfKAv2_hm;
 // Number of input feature dimensions after conversion
 constexpr IndexType TransformedFeatureDimensionsBig = 1024;
 constexpr int       L2Big                           = 31;
-constexpr int       L3Big                           = 32;
+constexpr int       L3Big                           = 31;
 
 constexpr IndexType TransformedFeatureDimensionsSmall = 128;
 constexpr int       L2Small                           = 15;
@@ -59,6 +59,7 @@ static_assert(PSQTBuckets % 8 == 0,
 
 template<IndexType L1, int L2, int L3>
 struct NetworkArchitecture {
+    static constexpr bool      IsBigNet = (L1 == TransformedFeatureDimensionsBig);
     static constexpr IndexType TransformedFeatureDimensions = L1;
     static constexpr int       FC_0_OUTPUTS                 = L2;
     static constexpr int       FC_1_OUTPUTS                 = L3;
@@ -66,8 +67,8 @@ struct NetworkArchitecture {
     Layers::AffineTransformSparseInput<TransformedFeatureDimensions, FC_0_OUTPUTS + 1> fc_0;
     Layers::SqrClippedReLU<FC_0_OUTPUTS + 1>                                           ac_sqr_0;
     Layers::ClippedReLU<FC_0_OUTPUTS + 1>                                              ac_0;
-    Layers::AffineTransform<FC_0_OUTPUTS * 2, FC_1_OUTPUTS>                            fc_1;
-    Layers::ClippedReLU<FC_1_OUTPUTS>                                                  ac_1;
+    Layers::AffineTransform<FC_0_OUTPUTS * 2, FC_1_OUTPUTS + IsBigNet>                 fc_1;
+    Layers::ClippedReLU<FC_1_OUTPUTS + IsBigNet>                                       ac_1;
     Layers::AffineTransform<FC_1_OUTPUTS, 1>                                           fc_2;
 
     // Hash value embedded in the evaluation file
@@ -132,9 +133,11 @@ struct NetworkArchitecture {
 
         // buffer.fc_0_out[FC_0_OUTPUTS] is such that 1.0 is equal to 127*(1<<WeightScaleBits) in
         // quantized form, but we want 1.0 to be equal to 600*OutputScale
-        std::int32_t fwdOut =
+        std::int32_t fwdOut1 =
           (buffer.fc_0_out[FC_0_OUTPUTS]) * (600 * OutputScale) / (127 * (1 << WeightScaleBits));
-        std::int32_t outputValue = buffer.fc_2_out[0] + fwdOut;
+        std::int32_t fwdOut2 = 
+          (buffer.fc_1_out[FC_1_OUTPUTS - IsBigNet]) * (600 * OutputScale) / (127 * (1 << WeightScaleBits));
+        std::int32_t outputValue = buffer.fc_2_out[0] + fwdOut + (IsBigNet ? fwdOut2 : 0);
 
         return outputValue;
     }
