@@ -16,7 +16,7 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-//Definition of input features FullThreats of NNUE evaluation function
+//Definition of input features FullThreatsv2 of NNUE evaluation function
 
 #include "full_threats.h"
 
@@ -24,6 +24,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <tuple>
 #include <utility>
 
 #include "../../bitboard.h"
@@ -35,7 +36,8 @@
 namespace Stockfish::Eval::NNUE::Features {
 
 struct HelperOffsets {
-    int cumulativePieceOffset, cumulativeOffset;
+    int cumulativeOffset;
+    std::array<int, PIECE_NB> cumulativeTargetOffsets; 
 };
 
 constexpr std::array<Piece, 12> AllPieces = {
@@ -113,45 +115,69 @@ constexpr auto index_lut2_array() {
     return indices;
 }
 
+void compile_fail();
+
 constexpr auto init_threat_offsets() {
-    std::array<HelperOffsets, PIECE_NB>                    indices{};
-    std::array<std::array<IndexType, SQUARE_NB>, PIECE_NB> offsets{};
+    std::array<HelperOffsets, PIECE_NB>                                      indices{};
+    std::array<std::array<std::array<uint16_t, 2>, SQUARE_NB>, PIECE_NB>     offsets{};
 
     int cumulativeOffset = 0;
     for (Piece piece : AllPieces)
     {
         int pieceIdx              = piece;
-        int cumulativePieceOffset = 0;
+        int cumulativeFullPieceOffset = 0;
+        int cumulativeSemiPieceOffset = 0;
 
         for (Square from = SQ_A1; from <= SQ_H8; ++from)
         {
-            offsets[pieceIdx][from] = cumulativePieceOffset;
+            offsets[pieceIdx][from][0] = cumulativeFullPieceOffset;
+            offsets[pieceIdx][from][1] = cumulativeSemiPieceOffset;
 
             if (type_of(piece) != PAWN)
             {
                 Bitboard attacks = PseudoAttacks[type_of(piece)][from];
-                cumulativePieceOffset += constexpr_popcount(attacks);
+                cumulativeFullPieceOffset += constexpr_popcount(attacks);
+                cumulativeSemiPieceOffset += constexpr_popcount(attacks & (square_bb(from) - 1));
             }
 
             else if (from >= SQ_A2 && from <= SQ_H7)
             {
                 Bitboard attacks = (pieceIdx < 8) ? pawn_attacks_bb<WHITE>(square_bb(from))
                                                   : pawn_attacks_bb<BLACK>(square_bb(from));
-                cumulativePieceOffset += constexpr_popcount(attacks);
+                cumulativeFullPieceOffset += constexpr_popcount(attacks);
+                cumulativeSemiPieceOffset += constexpr_popcount(attacks & (square_bb(from) - 1));
             }
         }
 
-        indices[pieceIdx] = {cumulativePieceOffset, cumulativeOffset};
+        indices[pieceIdx].cumulativeOffset = cumulativeOffset;
+        int cumulativeTargetOffset = 0;
+        for (Piece target: AllPieces)
+        {
+            indices[pieceIdx].cumulativeTargetOffsets[target] = cumulativeTargetOffset;
+            if (FullThreatsv2::map[type_of(piece) - 1][type_of(target) - 1] < 0 
+                || (piece == W_PAWN && target == B_PAWN)) {
+                continue;
+            }
+            else if (type_of(piece) == type_of(target) && type_of(piece) != PAWN) {
+                cumulativeTargetOffset += cumulativeSemiPieceOffset;
+            }
+            else {
+                cumulativeTargetOffset += cumulativeFullPieceOffset;
+            }
+        }
 
-        cumulativeOffset += numValidTargets[pieceIdx] * cumulativePieceOffset;
+        cumulativeOffset += cumulativeTargetOffset;
     }
 
+    if (cumulativeOffset != FullThreatsv2::Dimensions) {
+        compile_fail();
+    }
     return std::pair{indices, offsets};
 }
 
-constexpr auto helper_offsets = init_threat_offsets().first;
 // Lookup array for indexing threats
-constexpr auto offsets = init_threat_offsets().second;
+constexpr auto helper_offsets = init_threat_offsets().first;
+constexpr auto square_offsets = init_threat_offsets().second;
 
 constexpr auto init_index_luts() {
     std::array<std::array<std::array<uint32_t, 2>, PIECE_NB>, PIECE_NB> indices{};
@@ -164,16 +190,16 @@ constexpr auto init_index_luts() {
             PieceType attackerType = type_of(attacker);
             PieceType attackedType = type_of(attacked);
 
-            int  map           = FullThreats::map[attackerType - 1][attackedType - 1];
+            int  map           = FullThreatsv2::map[attackerType - 1][attackedType - 1];
             bool semi_excluded = attackerType == attackedType && (enemy || attackerType != PAWN);
-            IndexType feature  = helper_offsets[attacker].cumulativeOffset
-                              + (color_of(attacked) * (numValidTargets[attacker] / 2) + map)
-                                  * helper_offsets[attacker].cumulativePieceOffset;
 
-            bool excluded                  = map < 0;
-            indices[attacker][attacked][0] = excluded ? FullThreats::Dimensions : feature;
+            IndexType feature  = helper_offsets[attacker].cumulativeOffset
+                                + helper_offsets[attacker].cumulativeTargetOffsets[attacked];
+
+            bool excluded                  = map < 0 || (attacker == W_PAWN && attacked == B_PAWN);
+            indices[attacker][attacked][0] = excluded ? FullThreatsv2::Dimensions : feature;
             indices[attacker][attacked][1] =
-              excluded || semi_excluded ? FullThreats::Dimensions : feature;
+              excluded || semi_excluded ? FullThreatsv2::Dimensions : feature;
         }
     }
 
@@ -189,7 +215,7 @@ constexpr auto index_lut1 = init_index_luts();
 constexpr auto index_lut2 = index_lut2_array();
 
 // Index of a feature for a given king position and another piece on some square
-inline sf_always_inline IndexType FullThreats::make_index(
+inline sf_always_inline IndexType FullThreatsv2::make_index(
   Color perspective, Piece attacker, Square from, Square to, Piece attacked, Square ksq) {
     const std::int8_t orientation   = OrientTBL[ksq] ^ (56 * perspective);
     unsigned          from_oriented = uint8_t(from) ^ orientation;
@@ -200,13 +226,13 @@ inline sf_always_inline IndexType FullThreats::make_index(
     unsigned    attacked_oriented = attacked ^ swap;
 
     return index_lut1[attacker_oriented][attacked_oriented][from_oriented < to_oriented]
-         + offsets[attacker_oriented][from_oriented]
+         + square_offsets[attacker_oriented][from_oriented][type_of(attacker) == type_of(attacked)]
          + index_lut2[attacker_oriented][from_oriented][to_oriented];
 }
 
 // Get a list of indices for active features in ascending order
 
-void FullThreats::append_active_indices(Color perspective, const Position& pos, IndexList& active) {
+void FullThreatsv2::append_active_indices(Color perspective, const Position& pos, IndexList& active) {
     Square   ksq      = pos.square<KING>(perspective);
     Bitboard occupied = pos.pieces();
 
@@ -274,7 +300,7 @@ void FullThreats::append_active_indices(Color perspective, const Position& pos, 
 
 // Get a list of indices for recently changed features
 
-void FullThreats::append_changed_indices(Color                   perspective,
+void FullThreatsv2::append_changed_indices(Color                   perspective,
                                          Square                  ksq,
                                          const DiffType&         diff,
                                          IndexList&              removed,
@@ -336,7 +362,7 @@ void FullThreats::append_changed_indices(Color                   perspective,
     }
 }
 
-bool FullThreats::requires_refresh(const DiffType& diff, Color perspective) {
+bool FullThreatsv2::requires_refresh(const DiffType& diff, Color perspective) {
     return perspective == diff.us && (int8_t(diff.ksq) & 0b100) != (int8_t(diff.prevKsq) & 0b100);
 }
 
