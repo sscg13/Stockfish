@@ -220,13 +220,14 @@ inline sf_always_inline IndexType FullThreatsv2::make_index(
     const std::int8_t orientation   = OrientTBL[ksq] ^ (56 * perspective);
     unsigned          from_oriented = uint8_t(from) ^ orientation;
     unsigned          to_oriented   = uint8_t(to) ^ orientation;
+    bool semi_exclude = (type_of(attacker) == type_of(attacked) && type_of(attacker) != PAWN);
 
     std::int8_t swap              = 8 * perspective;
     unsigned    attacker_oriented = attacker ^ swap;
     unsigned    attacked_oriented = attacked ^ swap;
 
     return index_lut1[attacker_oriented][attacked_oriented][from_oriented < to_oriented]
-         + square_offsets[attacker_oriented][from_oriented][type_of(attacker) == type_of(attacked)]
+         + square_offsets[attacker_oriented][from_oriented][semi_exclude]
          + index_lut2[attacker_oriented][from_oriented][to_oriented];
 }
 
