@@ -41,11 +41,11 @@ using PSQFeatureSet    = Features::HalfKAv2_hm;
 
 // Number of input feature dimensions after conversion
 constexpr IndexType TransformedFeatureDimensionsBig = 1024;
-constexpr int       L2Big                           = 31;
+constexpr int       L2Big                           = 32;
 constexpr int       L3Big                           = 32;
 
 constexpr IndexType TransformedFeatureDimensionsSmall = 128;
-constexpr int       L2Small                           = 15;
+constexpr int       L2Small                           = 16;
 constexpr int       L3Small                           = 32;
 
 constexpr IndexType PSQTBuckets = 8;
@@ -63,12 +63,12 @@ struct NetworkArchitecture {
     static constexpr int       FC_0_OUTPUTS                 = L2;
     static constexpr int       FC_1_OUTPUTS                 = L3;
 
-    Layers::AffineTransformSparseInput<TransformedFeatureDimensions, FC_0_OUTPUTS + 1> fc_0;
-    Layers::SqrClippedReLU<FC_0_OUTPUTS + 1>                                           ac_sqr_0;
-    Layers::ClippedReLU<FC_0_OUTPUTS + 1>                                              ac_0;
-    Layers::AffineTransform<FC_0_OUTPUTS * 2, FC_1_OUTPUTS>                            fc_1;
-    Layers::ClippedReLU<FC_1_OUTPUTS>                                                  ac_1;
-    Layers::AffineTransform<FC_1_OUTPUTS, 1>                                           fc_2;
+    Layers::AffineTransformSparseInput<TransformedFeatureDimensions, FC_0_OUTPUTS> fc_0;
+    Layers::SqrClippedReLU<FC_0_OUTPUTS>                                           ac_sqr_0;
+    Layers::ClippedReLU<FC_0_OUTPUTS>                                              ac_0;
+    Layers::AffineTransform<FC_0_OUTPUTS * 2, FC_1_OUTPUTS>                        fc_1;
+    Layers::ClippedReLU<FC_1_OUTPUTS>                                              ac_1;
+    Layers::AffineTransform<FC_1_OUTPUTS, 1>                                       fc_2;
 
     // Hash value embedded in the evaluation file
     static constexpr std::uint32_t get_hash_value() {
@@ -123,13 +123,7 @@ struct NetworkArchitecture {
         ac_1.propagate(buffer.fc_1_out, buffer.ac_1_out);
         fc_2.propagate(buffer.ac_1_out, buffer.fc_2_out);
 
-        // buffer.fc_0_out[FC_0_OUTPUTS] is such that 1.0 is equal to 127*(1<<WeightScaleBits) in
-        // quantized form, but we want 1.0 to be equal to 600*OutputScale
-        std::int32_t fwdOut =
-          (buffer.fc_0_out[FC_0_OUTPUTS]) * (600 * OutputScale) / (127 * (1 << WeightScaleBits));
-        std::int32_t outputValue = buffer.fc_2_out[0] + fwdOut;
-
-        return outputValue;
+        return buffer.fc_2_out[0];
     }
 
     std::size_t get_content_hash() const {
