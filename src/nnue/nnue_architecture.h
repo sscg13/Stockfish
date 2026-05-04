@@ -62,8 +62,9 @@ struct NetworkArchitecture {
     Layers::SqrClippedReLU<FC_0_OUTPUTS + 1>                                           ac_sqr_0;
     Layers::ClippedReLU<FC_0_OUTPUTS + 1>                                              ac_0;
     Layers::AffineTransform<FC_0_OUTPUTS * 2, FC_1_OUTPUTS>                            fc_1;
+    Layers::SqrClippedReLU<FC_1_OUTPUTS>                                               ac_sqr_1;
     Layers::ClippedReLU<FC_1_OUTPUTS>                                                  ac_1;
-    Layers::AffineTransform<FC_1_OUTPUTS, 1>                                           fc_2;
+    Layers::AffineTransform<FC_1_OUTPUTS * 2, 1>                                       fc_2;
 
     // Hash value embedded in the evaluation file
     static constexpr std::uint32_t get_hash_value() {
@@ -101,10 +102,15 @@ struct NetworkArchitecture {
               ac_sqr_0_out[ceil_to_multiple<IndexType>(FC_0_OUTPUTS * 2, 32)];
             alignas(CacheLineSize) typename decltype(ac_0)::OutputBuffer ac_0_out;
             alignas(CacheLineSize) typename decltype(fc_1)::OutputBuffer fc_1_out;
+            alignas(CacheLineSize) typename decltype(ac_sqr_1)::OutputType
+              ac_sqr_1_out[ceil_to_multiple<IndexType>(FC_1_OUTPUTS * 2, 32)];
             alignas(CacheLineSize) typename decltype(ac_1)::OutputBuffer ac_1_out;
             alignas(CacheLineSize) typename decltype(fc_2)::OutputBuffer fc_2_out;
 
-            Buffer() { std::memset(ac_sqr_0_out, 0, sizeof(ac_sqr_0_out)); }
+            Buffer() {
+                std::memset(ac_sqr_0_out, 0, sizeof(ac_sqr_0_out));
+                std::memset(ac_sqr_1_out, 0, sizeof(ac_sqr_1_out));
+            }
         };
 
         Buffer buffer;
@@ -115,8 +121,11 @@ struct NetworkArchitecture {
         std::memcpy(buffer.ac_sqr_0_out + FC_0_OUTPUTS, buffer.ac_0_out,
                     FC_0_OUTPUTS * sizeof(typename decltype(ac_0)::OutputType));
         fc_1.propagate(buffer.ac_sqr_0_out, buffer.fc_1_out);
+        ac_sqr_1.propagate(buffer.fc_1_out, buffer.ac_sqr_1_out);
         ac_1.propagate(buffer.fc_1_out, buffer.ac_1_out);
-        fc_2.propagate(buffer.ac_1_out, buffer.fc_2_out);
+        std::memcpy(buffer.ac_sqr_1_out + FC_1_OUTPUTS, buffer.ac_1_out,
+                    FC_1_OUTPUTS * sizeof(typename decltype(ac_1)::OutputType));
+        fc_2.propagate(buffer.ac_sqr_1_out, buffer.fc_2_out);
 
         // buffer.fc_0_out[FC_0_OUTPUTS] is such that 1.0 is equal to 127*(1<<WeightScaleBits) in
         // quantized form, but we want 1.0 to be equal to 600*OutputScale
@@ -133,6 +142,7 @@ struct NetworkArchitecture {
         hash_combine(h, ac_sqr_0.get_content_hash());
         hash_combine(h, ac_0.get_content_hash());
         hash_combine(h, fc_1.get_content_hash());
+        hash_combine(h, ac_sqr_1.get_content_hash());
         hash_combine(h, ac_1.get_content_hash());
         hash_combine(h, fc_2.get_content_hash());
         hash_combine(h, get_hash_value());
