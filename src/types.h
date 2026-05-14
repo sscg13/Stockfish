@@ -215,6 +215,38 @@ enum Piece : std::uint8_t {
 };
 // clang-format on
 
+// Attack pattern type — White-absolute color encoding
+enum AttackType : uint8_t {
+    W_PAWN_DIAG_AT = 0,
+    W_PAWN_PUSH_AT = 1,
+    W_KNIGHT_AT    = 2,
+    W_BISHOP_AT    = 3,
+    W_ROOK_AT      = 4,
+    W_QUEEN_AT     = 5,
+    B_PAWN_DIAG_AT = 6,
+    B_PAWN_PUSH_AT = 7,
+    B_KNIGHT_AT    = 8,
+    B_BISHOP_AT    = 9,
+    B_ROOK_AT      = 10,
+    B_QUEEN_AT     = 11,
+    ATTACK_TYPE_NB = 12
+};
+
+// Target piece identity — White-absolute color encoding (KING excluded)
+enum TargetType : uint8_t {
+    W_PAWN_TT      = 0,
+    W_KNIGHT_TT    = 1,
+    W_BISHOP_TT    = 2,
+    W_ROOK_TT      = 3,
+    W_QUEEN_TT     = 4,
+    B_PAWN_TT      = 5,
+    B_KNIGHT_TT    = 6,
+    B_BISHOP_TT    = 7,
+    B_ROOK_TT      = 8,
+    B_QUEEN_TT     = 9,
+    TARGET_TYPE_NB = 10
+};
+
 constexpr Value PieceValue[PIECE_NB] = {
   VALUE_ZERO, PawnValue, KnightValue, BishopValue, RookValue, QueenValue, VALUE_ZERO, VALUE_ZERO,
   VALUE_ZERO, PawnValue, KnightValue, BishopValue, RookValue, QueenValue, VALUE_ZERO, VALUE_ZERO};
@@ -306,23 +338,24 @@ struct DirtyPiece {
 struct DirtyThreat {
     static constexpr int PcSqOffset         = 0;
     static constexpr int ThreatenedSqOffset = 8;
-    static constexpr int ThreatenedPcOffset = 16;
-    static constexpr int PcOffset           = 20;
+    static constexpr int TargetTypeOffset   = 16;
+    static constexpr int AttackTypeOffset   = 20;
 
     DirtyThreat() { /* don't initialize data */ }
     DirtyThreat(uint32_t raw) :
         data(raw) {}
-    DirtyThreat(Piece pc, Piece threatened_pc, Square pc_sq, Square threatened_sq, bool add) {
-        data = (uint32_t(add) << 31) | (pc << PcOffset) | (threatened_pc << ThreatenedPcOffset)
-             | (threatened_sq << ThreatenedSqOffset) | (pc_sq << PcSqOffset);
+    DirtyThreat(AttackType at, TargetType tt, Square pc_sq, Square threatened_sq, bool add) {
+        data = (uint32_t(add) << 31) | (uint32_t(at) << AttackTypeOffset)
+             | (uint32_t(tt) << TargetTypeOffset) | (uint32_t(threatened_sq) << ThreatenedSqOffset)
+             | (uint32_t(pc_sq) << PcSqOffset);
     }
 
-    Piece  pc() const { return static_cast<Piece>(data >> PcOffset & 0xf); }
-    Piece  threatened_pc() const { return static_cast<Piece>(data >> ThreatenedPcOffset & 0xf); }
-    Square threatened_sq() const { return static_cast<Square>(data >> ThreatenedSqOffset & 0xff); }
-    Square pc_sq() const { return static_cast<Square>(data >> PcSqOffset & 0xff); }
-    bool   add() const { return data >> 31; }
-    uint32_t raw() const { return data; }
+    AttackType attack_type() const { return static_cast<AttackType>(data >> AttackTypeOffset & 0xf); }
+    TargetType target_type() const { return static_cast<TargetType>(data >> TargetTypeOffset & 0xf); }
+    Square     threatened_sq() const { return static_cast<Square>(data >> ThreatenedSqOffset & 0xff); }
+    Square     pc_sq() const { return static_cast<Square>(data >> PcSqOffset & 0xff); }
+    bool       add() const { return data >> 31; }
+    uint32_t   raw() const { return data; }
 
    private:
     uint32_t data;
@@ -392,6 +425,23 @@ constexpr PieceType type_of(Piece pc) { return PieceType(pc & 7); }
 constexpr Color color_of(Piece pc) {
     assert(pc != NO_PIECE);
     return Color(pc >> 3);
+}
+
+constexpr AttackType make_attack_type(Piece attacker, bool isPush = false) {
+    bool white = color_of(attacker) == WHITE;
+    switch (type_of(attacker)) {
+        case PAWN:   return AttackType((white ? 0 : 6) + isPush);
+        case KNIGHT: return AttackType(white ? W_KNIGHT_AT : B_KNIGHT_AT);
+        case BISHOP: return AttackType(white ? W_BISHOP_AT : B_BISHOP_AT);
+        case ROOK:   return AttackType(white ? W_ROOK_AT   : B_ROOK_AT);
+        case QUEEN:  return AttackType(white ? W_QUEEN_AT  : B_QUEEN_AT);
+        default:     assert(false); return AttackType(0);
+    }
+}
+
+constexpr TargetType make_target_type(Piece target) {
+    int base = (color_of(target) == WHITE) ? 0 : 5;
+    return TargetType(base + int(type_of(target)) - 1);  // PAWN→0, KNIGHT→1, ..., QUEEN→4
 }
 
 constexpr bool is_ok(Square s) { return s >= SQ_A1 && s <= SQ_H8; }

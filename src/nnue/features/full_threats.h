@@ -30,19 +30,16 @@ class Position;
 
 namespace Stockfish::Eval::NNUE::Features {
 
-static constexpr int numValidTargets[PIECE_NB] = {0, 6, 10, 8, 8, 10, 0, 0,
-                                                  0, 6, 10, 8, 8, 10, 0, 0};
-
 class FullThreats {
    public:
     // Feature name
     static constexpr const char* Name = "Full_Threats(Friend)";
 
     // Hash value embedded in the evaluation file
-    static constexpr std::uint32_t HashValue = 0x8f234cb8u;
+    static constexpr std::uint32_t HashValue = 0x7a4e1b2cu;
 
     // Number of feature dimensions
-    static constexpr IndexType Dimensions = 60720;
+    static constexpr IndexType Dimensions = 60336;
 
     // clang-format off
     // Orient a square according to perspective (rotates by 180 for black)
@@ -57,13 +54,42 @@ class FullThreats {
         SQ_A1, SQ_A1, SQ_A1, SQ_A1, SQ_H1, SQ_H1, SQ_H1, SQ_H1,
     };
 
-    static constexpr int map[PIECE_TYPE_NB-2][PIECE_TYPE_NB-2] = {
-      { 0,  1, -1,  2, -1, -1},
-      { 0,  1,  2,  3,  4, -1},
-      { 0,  1,  2,  3, -1, -1},
-      { 0,  1,  2,  3, -1, -1},
-      { 0,  1,  2,  3,  4, -1},
-      {-1, -1, -1, -1, -1, -1}
+    // Slot index for each (AttackType, TargetType) pair.
+    // -1 = fully excluded (never a valid feature).
+    // >= 0 = contiguous slot index used to compute the feature base offset.
+    static constexpr std::int8_t slot_map[ATTACK_TYPE_NB][TARGET_TYPE_NB] = {
+      //                  W_P  W_N  W_B  W_R  W_Q  B_P  B_N  B_B  B_R  B_Q
+      /* W_PAWN_DIAG */ {  0,   1,  -1,   2,  -1,   3,   4,  -1,   5,  -1},
+      /* W_PAWN_PUSH */ {  0,  -1,  -1,  -1,  -1,   1,  -1,  -1,  -1,  -1},
+      /* W_KNIGHT    */ {  0,   1,   2,   3,   4,   5,   6,   7,   8,   9},
+      /* W_BISHOP    */ {  0,   1,   2,   3,  -1,   4,   5,   6,   7,  -1},
+      /* W_ROOK      */ {  0,   1,   2,   3,  -1,   4,   5,   6,   7,  -1},
+      /* W_QUEEN     */ {  0,   1,   2,   3,   4,   5,   6,   7,   8,   9},
+      /* B_PAWN_DIAG */ {  0,   1,  -1,   2,  -1,   3,   4,  -1,   5,  -1},
+      /* B_PAWN_PUSH */ {  0,  -1,  -1,  -1,  -1,   1,  -1,  -1,  -1,  -1},
+      /* B_KNIGHT    */ {  0,   1,   2,   3,   4,   5,   6,   7,   8,   9},
+      /* B_BISHOP    */ {  0,   1,   2,   3,  -1,   4,   5,   6,   7,  -1},
+      /* B_ROOK      */ {  0,   1,   2,   3,  -1,   4,   5,   6,   7,  -1},
+      /* B_QUEEN     */ {  0,   1,   2,   3,   4,   5,   6,   7,   8,   9},
+    };
+
+    // Semi-exclusion: true = only active when from_oriented >= to_oriented.
+    // Encodes symmetric pairs (mutual attacks / same-type defences) so each
+    // pair is represented by exactly one feature index.
+    static constexpr bool semi_map[ATTACK_TYPE_NB][TARGET_TYPE_NB] = {
+      //                  W_P    W_N    W_B    W_R    W_Q    B_P    B_N    B_B    B_R    B_Q
+      /* W_PAWN_DIAG */ {false, false, false, false, false,  true, false, false, false, false},
+      /* W_PAWN_PUSH */ {false, false, false, false, false, false, false, false, false, false},
+      /* W_KNIGHT    */ {false,  true, false, false, false, false,  true, false, false, false},
+      /* W_BISHOP    */ {false, false,  true, false, false, false, false,  true, false, false},
+      /* W_ROOK      */ {false, false, false,  true, false, false, false, false,  true, false},
+      /* W_QUEEN     */ {false, false, false, false,  true, false, false, false, false,  true},
+      /* B_PAWN_DIAG */ { true, false, false, false, false, false, false, false, false, false},
+      /* B_PAWN_PUSH */ {false, false, false, false, false, false, false, false, false, false},
+      /* B_KNIGHT    */ {false,  true, false, false, false, false,  true, false, false, false},
+      /* B_BISHOP    */ {false, false,  true, false, false, false, false,  true, false, false},
+      /* B_ROOK      */ {false, false, false,  true, false, false, false, false,  true, false},
+      /* B_QUEEN     */ {false, false, false, false,  true, false, false, false, false,  true},
     };
     // clang-format on
 
@@ -80,7 +106,7 @@ class FullThreats {
     using DiffType                                 = DirtyThreats;
 
     static IndexType
-    make_index(Color perspective, Piece attkr, Square from, Square to, Piece attkd, Square ksq);
+    make_index(Color perspective, AttackType at, Square from, Square to, TargetType tt, Square ksq);
 
     // Get a list of indices for active features
     static void append_active_indices(Color perspective, const Position& pos, IndexList& active);

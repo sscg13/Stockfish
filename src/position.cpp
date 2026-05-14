@@ -1152,17 +1152,18 @@ void Position::undo_move(Move m) {
 
 inline void add_dirty_threat(DirtyThreats* const dts,
                              bool                putPiece,
-                             Piece               pc,
-                             Piece               threatened,
+                             AttackType          at,
+                             TargetType          tt,
                              Square              s,
                              Square              threatenedSq) {
-    dts->list.push_back({pc, threatened, s, threatenedSq, putPiece});
+    dts->list.push_back({at, tt, s, threatenedSq, putPiece});
 }
 
 #ifdef USE_AVX512ICL
-// Given a DirtyThreat template and bit offsets to insert the piece type and square, write the threats
-// present at the given bitboard.
-template<int SqShift, int PcShift>
+// Given a DirtyThreat template and bit offsets to insert the type and square, write the threats
+// present at the given bitboard. When ConvertToAttackType is true, the board piece is converted
+// to AttackType (for incoming threats); otherwise it is converted to TargetType (for outgoing).
+template<int SqShift, int PcShift, bool ConvertToAttackType>
 void write_multiple_dirties(const Position& p,
                             Bitboard        mask,
                             DirtyThreat     dt_template,
@@ -1184,7 +1185,31 @@ void write_multiple_dirties(const Position& p,
     __m512i threat_pieces =
       _mm512_maskz_permutexvar_epi8(0x1111111111111111ULL, threat_squares, board);
 
-    // Shift the piece and square into place
+    // Convert raw piece value to AttackType or TargetType before packing into the template.
+    if constexpr (ConvertToAttackType)
+    {
+        // AT = piece - 2 + 2*(piece < 8) - ((piece & 7) == 1)
+        // Handles diagonal-only attacks; push cases are emitted by separate scalar calls.
+        __mmask16 white_mask = _mm512_cmplt_epi32_mask(threat_pieces, _mm512_set1_epi32(8));
+        __m512i   is_white   = _mm512_mask_set1_epi32(_mm512_setzero_si512(), white_mask, 1);
+        __mmask16 pawn_mask  = _mm512_cmpeq_epi32_mask(
+          _mm512_and_epi32(threat_pieces, _mm512_set1_epi32(7)), _mm512_set1_epi32(1));
+        __m512i is_pawn = _mm512_mask_set1_epi32(_mm512_setzero_si512(), pawn_mask, 1);
+        threat_pieces   = _mm512_sub_epi32(threat_pieces, _mm512_set1_epi32(2));
+        threat_pieces   = _mm512_add_epi32(threat_pieces, _mm512_slli_epi32(is_white, 1));
+        threat_pieces   = _mm512_sub_epi32(threat_pieces, is_pawn);
+    }
+    else
+    {
+        // TT = (piece & 7) - 1 + ((piece >> 3) & 1) * 5
+        __m512i pt = _mm512_sub_epi32(_mm512_and_epi32(threat_pieces, _mm512_set1_epi32(7)),
+                                      _mm512_set1_epi32(1));
+        __m512i co = _mm512_and_epi32(_mm512_srli_epi32(threat_pieces, 3), _mm512_set1_epi32(1));
+        co         = _mm512_add_epi32(_mm512_slli_epi32(co, 2), co);  // co * 5
+        threat_pieces = _mm512_add_epi32(pt, co);
+    }
+
+    // Shift the type and square into place
     threat_squares = _mm512_slli_epi32(threat_squares, SqShift);
     threat_pieces  = _mm512_slli_epi32(threat_pieces, PcShift);
 
@@ -1224,11 +1249,13 @@ void Position::update_piece_threats(Piece               pc,
             {
                 const Square threatenedSq = lsb(discovered);
                 const Piece  threatenedPc = piece_on(threatenedSq);
-                add_dirty_threat(dts, !putPiece, slider, threatenedPc, sliderSq, threatenedSq);
+                add_dirty_threat(dts, !putPiece, make_attack_type(slider),
+                                 make_target_type(threatenedPc), sliderSq, threatenedSq);
             }
 
             if (addDirectAttacks)
-                add_dirty_threat(dts, putPiece, slider, pc, sliderSq, s);
+                add_dirty_threat(dts, putPiece, make_attack_type(slider), make_target_type(pc),
+                                 sliderSq, s);
         }
     };
 
@@ -1246,20 +1273,38 @@ void Position::update_piece_threats(Piece               pc,
 
 
     Bitboard threatened = attacks_bb(pc, s, occupied) & occupiedNoK;
-    Bitboard incoming_threats =
-      (PseudoAttacks[KNIGHT][s] & knights) | (PseudoAttacks[KING][s] & kings);
+    Bitboard incoming_threats = (PseudoAttacks[KNIGHT][s] & knights);
 
-    // Compute both incoming and outgoing pawn threats. Incoming pawn pushers are only
-    // added if 'pc' is a pawn.
+    // Compute both incoming and outgoing pawn threats. Push threats are only relevant when
+    // 'pc' is a pawn (push features only exist for pawn-vs-pawn pairs).
     if (type_of(pc) == PAWN)
     {
-        Bitboard whiteAttacks = PawnPushOrAttacks[WHITE][s];
-        Bitboard blackAttacks = PawnPushOrAttacks[BLACK][s];
+        Color c = color_of(pc);
 
-        threatened |= (color_of(pc) == WHITE ? whiteAttacks : blackAttacks) & pieces(PAWN);
+        // Outgoing push: the square directly in front, only when occupied by a pawn.
+        {
+            AttackType pushAT      = make_attack_type(pc, true);
+            Bitboard   pushTargets = pawn_single_push_bb(c, square_bb(s)) & pieces(PAWN);
+            while (pushTargets)
+            {
+                Square tgt = pop_lsb(pushTargets);
+                add_dirty_threat(dts, putPiece, pushAT, make_target_type(piece_on(tgt)), s, tgt);
+            }
+        }
 
-        incoming_threats |= whiteAttacks & blackPawns;
-        incoming_threats |= blackAttacks & whitePawns;
+        // Incoming diagonal pawn threats to s.
+        incoming_threats |= PseudoAttacks[WHITE][s] & blackPawns;
+        incoming_threats |= PseudoAttacks[BLACK][s] & whitePawns;
+
+        // Incoming push threats: pawns whose advance is blocked by pc at s.
+        Square whitePushSrc = Square(s - NORTH);
+        if (is_ok(whitePushSrc) && piece_on(whitePushSrc) == W_PAWN)
+            add_dirty_threat(dts, putPiece, W_PAWN_PUSH_AT, make_target_type(pc),
+                             whitePushSrc, s);
+        Square blackPushSrc = Square(s + NORTH);
+        if (is_ok(blackPushSrc) && piece_on(blackPushSrc) == B_PAWN)
+            add_dirty_threat(dts, putPiece, B_PAWN_PUSH_AT, make_target_type(pc),
+                             blackPushSrc, s);
     }
     else
     {
@@ -1268,15 +1313,23 @@ void Position::update_piece_threats(Piece               pc,
     }
 
 #ifdef USE_AVX512ICL
-    DirtyThreat dt_template{pc, NO_PIECE, s, Square(0), putPiece};
-    write_multiple_dirties<DirtyThreat::ThreatenedSqOffset, DirtyThreat::ThreatenedPcOffset>(
-      *this, threatened, dt_template, dts);
+    {
+        // Outgoing: AT is constant (diagonal for pawns), TT varies per target piece.
+        AttackType  at_pc       = make_attack_type(pc, false);
+        DirtyThreat dt_template = {at_pc, TargetType(0), s, Square(0), putPiece};
+        write_multiple_dirties<DirtyThreat::ThreatenedSqOffset, DirtyThreat::TargetTypeOffset,
+                               false>(*this, threatened, dt_template, dts);
+    }
 
     Bitboard all_attackers = sliders | incoming_threats;
 
-    dt_template = {NO_PIECE, pc, Square(0), s, putPiece};
-    write_multiple_dirties<DirtyThreat::PcSqOffset, DirtyThreat::PcOffset>(*this, all_attackers,
-                                                                           dt_template, dts);
+    {
+        // Incoming: TT is constant (target is pc), AT varies per attacker piece.
+        TargetType  tt_pc       = make_target_type(pc);
+        DirtyThreat dt_template = {AttackType(0), tt_pc, Square(0), s, putPiece};
+        write_multiple_dirties<DirtyThreat::PcSqOffset, DirtyThreat::AttackTypeOffset,
+                               true>(*this, all_attackers, dt_template, dts);
+    }
 #else
     while (threatened)
     {
@@ -1286,7 +1339,8 @@ void Position::update_piece_threats(Piece               pc,
         assert(threatenedSq != s);
         assert(threatenedPc);
 
-        add_dirty_threat(dts, putPiece, pc, threatenedPc, s, threatenedSq);
+        add_dirty_threat(dts, putPiece, make_attack_type(pc), make_target_type(threatenedPc),
+                         s, threatenedSq);
     }
 #endif
 
@@ -1312,7 +1366,7 @@ void Position::update_piece_threats(Piece               pc,
         assert(srcSq != s);
         assert(srcPc != NO_PIECE);
 
-        add_dirty_threat(dts, putPiece, srcPc, pc, srcSq, s);
+        add_dirty_threat(dts, putPiece, make_attack_type(srcPc), make_target_type(pc), srcSq, s);
     }
 #endif
 }
