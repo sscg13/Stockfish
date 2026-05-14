@@ -191,9 +191,10 @@ inline sf_always_inline IndexType FullThreats::make_index(
 // Get a list of indices for active features in ascending order
 
 void FullThreats::append_active_indices(Color perspective, const Position& pos, IndexList& active) {
-    const Square   ksq      = pos.square<KING>(perspective);
-    const Bitboard occupied = pos.pieces();
-    const Bitboard pawns    = pos.pieces(PAWN);
+    const Square   ksq         = pos.square<KING>(perspective);
+    const Bitboard occupied    = pos.pieces();
+    const Bitboard occupiedNoK = occupied ^ pos.pieces(KING);
+    const Bitboard pawns       = pos.pieces(PAWN);
 
     for (Color color : {WHITE, BLACK})
     {
@@ -221,14 +222,14 @@ void FullThreats::append_active_indices(Color perspective, const Position& pos, 
 
             if (c == WHITE)
             {
-                process_pawn(shift<NORTH_EAST>(cPawns) & occupied, NORTH_EAST, false);
-                process_pawn(shift<NORTH_WEST>(cPawns) & occupied, NORTH_WEST, false);
+                process_pawn(shift<NORTH_EAST>(cPawns) & occupiedNoK, NORTH_EAST, false);
+                process_pawn(shift<NORTH_WEST>(cPawns) & occupiedNoK, NORTH_WEST, false);
                 process_pawn(shift<NORTH>(pushers), NORTH, true);
             }
             else
             {
-                process_pawn(shift<SOUTH_WEST>(cPawns) & occupied, SOUTH_WEST, false);
-                process_pawn(shift<SOUTH_EAST>(cPawns) & occupied, SOUTH_EAST, false);
+                process_pawn(shift<SOUTH_WEST>(cPawns) & occupiedNoK, SOUTH_WEST, false);
+                process_pawn(shift<SOUTH_EAST>(cPawns) & occupiedNoK, SOUTH_EAST, false);
                 process_pawn(shift<SOUTH>(pushers), SOUTH, true);
             }
         }
@@ -241,7 +242,7 @@ void FullThreats::append_active_indices(Color perspective, const Position& pos, 
             while (bb)
             {
                 Square   from    = pop_lsb(bb);
-                Bitboard attacks = attacks_bb(pt, from, occupied) & occupied;
+                Bitboard attacks = attacks_bb(pt, from, occupied) & occupiedNoK;
                 while (attacks)
                 {
                     Square     to       = pop_lsb(attacks);
