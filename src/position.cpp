@@ -1188,24 +1188,20 @@ void write_multiple_dirties(const Position& p,
     // Convert raw piece value to AttackType or TargetType before packing into the template.
     if constexpr (ConvertToAttackType)
     {
-        // AT = piece - 2 + 2*(piece < 8) - ((piece & 7) == 1)
-        // Handles diagonal-only attacks; push cases are emitted by separate scalar calls.
-        __mmask16 white_mask = _mm512_cmplt_epi32_mask(threat_pieces, _mm512_set1_epi32(8));
-        __m512i   is_white   = _mm512_mask_set1_epi32(_mm512_setzero_si512(), white_mask, 1);
+        // AT = piece - ((piece & 7) == 1)
+        // XOR-spacing-8 layout: W=0-5, B=8-13. Diagonal-only; push cases emitted by separate scalar calls.
         __mmask16 pawn_mask  = _mm512_cmpeq_epi32_mask(
           _mm512_and_epi32(threat_pieces, _mm512_set1_epi32(7)), _mm512_set1_epi32(1));
         __m512i is_pawn = _mm512_mask_set1_epi32(_mm512_setzero_si512(), pawn_mask, 1);
-        threat_pieces   = _mm512_sub_epi32(threat_pieces, _mm512_set1_epi32(2));
-        threat_pieces   = _mm512_add_epi32(threat_pieces, _mm512_slli_epi32(is_white, 1));
         threat_pieces   = _mm512_sub_epi32(threat_pieces, is_pawn);
     }
     else
     {
-        // TT = (piece & 7) - 1 + ((piece >> 3) & 1) * 5
+        // TT = (piece & 7) - 1 + (piece & 8)
+        // XOR-spacing-8 layout: W=0-4, B=8-12.
         __m512i pt = _mm512_sub_epi32(_mm512_and_epi32(threat_pieces, _mm512_set1_epi32(7)),
                                       _mm512_set1_epi32(1));
-        __m512i co = _mm512_and_epi32(_mm512_srli_epi32(threat_pieces, 3), _mm512_set1_epi32(1));
-        co         = _mm512_add_epi32(_mm512_slli_epi32(co, 2), co);  // co * 5
+        __m512i co = _mm512_and_epi32(threat_pieces, _mm512_set1_epi32(8));
         threat_pieces = _mm512_add_epi32(pt, co);
     }
 

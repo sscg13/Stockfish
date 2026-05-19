@@ -215,7 +215,9 @@ enum Piece : std::uint8_t {
 };
 // clang-format on
 
-// Attack pattern type — White-absolute color encoding
+// Attack pattern type — White-absolute color encoding.
+// W values are 0-5, B values are 8-13 (gap at 6-7), so that perspective flip is a
+// single XOR: at_oriented = at ^ (perspective << 3).
 enum AttackType : uint8_t {
     W_PAWN_DIAG_AT = 0,
     W_PAWN_PUSH_AT = 1,
@@ -223,28 +225,32 @@ enum AttackType : uint8_t {
     W_BISHOP_AT    = 3,
     W_ROOK_AT      = 4,
     W_QUEEN_AT     = 5,
-    B_PAWN_DIAG_AT = 6,
-    B_PAWN_PUSH_AT = 7,
-    B_KNIGHT_AT    = 8,
-    B_BISHOP_AT    = 9,
-    B_ROOK_AT      = 10,
-    B_QUEEN_AT     = 11,
-    ATTACK_TYPE_NB = 12
+    // values 6-7 are unused gaps
+    B_PAWN_DIAG_AT = 8,
+    B_PAWN_PUSH_AT = 9,
+    B_KNIGHT_AT    = 10,
+    B_BISHOP_AT    = 11,
+    B_ROOK_AT      = 12,
+    B_QUEEN_AT     = 13,
+    ATTACK_TYPE_NB = 14
 };
 
-// Target piece identity — White-absolute color encoding (KING excluded)
+// Target piece identity — White-absolute color encoding (KING excluded).
+// W values are 0-4, B values are 8-12 (gap at 5-7), so that perspective flip is a
+// single XOR: tt_oriented = tt ^ (perspective << 3).
 enum TargetType : uint8_t {
     W_PAWN_TT      = 0,
     W_KNIGHT_TT    = 1,
     W_BISHOP_TT    = 2,
     W_ROOK_TT      = 3,
     W_QUEEN_TT     = 4,
-    B_PAWN_TT      = 5,
-    B_KNIGHT_TT    = 6,
-    B_BISHOP_TT    = 7,
-    B_ROOK_TT      = 8,
-    B_QUEEN_TT     = 9,
-    TARGET_TYPE_NB = 10
+    // values 5-7 are unused gaps
+    B_PAWN_TT      = 8,
+    B_KNIGHT_TT    = 9,
+    B_BISHOP_TT    = 10,
+    B_ROOK_TT      = 11,
+    B_QUEEN_TT     = 12,
+    TARGET_TYPE_NB = 13
 };
 
 constexpr Value PieceValue[PIECE_NB] = {
@@ -428,20 +434,17 @@ constexpr Color color_of(Piece pc) {
 }
 
 constexpr AttackType make_attack_type(Piece attacker, bool isPush = false) {
-    bool white = color_of(attacker) == WHITE;
-    switch (type_of(attacker)) {
-        case PAWN:   return AttackType((white ? 0 : 6) + isPush);
-        case KNIGHT: return AttackType(white ? W_KNIGHT_AT : B_KNIGHT_AT);
-        case BISHOP: return AttackType(white ? W_BISHOP_AT : B_BISHOP_AT);
-        case ROOK:   return AttackType(white ? W_ROOK_AT   : B_ROOK_AT);
-        case QUEEN:  return AttackType(white ? W_QUEEN_AT  : B_QUEEN_AT);
-        default:     assert(false); return AttackType(0);
-    }
+    // Base is 0 for White, 8 for Black — supports XOR perspective flip (at ^ (perspective<<3)).
+    int base = (color_of(attacker) == WHITE) ? 0 : 8;
+    int pt   = int(type_of(attacker));
+    // PAWN (pt=1): diag→base+0, push→base+1; non-pawn: base+pt (Knight=2,Bishop=3,Rook=4,Queen=5)
+    return AttackType(base + (pt == PAWN ? int(isPush) : pt));
 }
 
 constexpr TargetType make_target_type(Piece target) {
-    int base = (color_of(target) == WHITE) ? 0 : 5;
-    return TargetType(base + int(type_of(target)) - 1);  // PAWN→0, KNIGHT→1, ..., QUEEN→4
+    // Base is 0 for White, 8 for Black — supports XOR perspective flip (tt ^ (perspective<<3)).
+    int base = (color_of(target) == WHITE) ? 0 : 8;
+    return TargetType(base + int(type_of(target)) - 1);  // PAWN→0/8, KNIGHT→1/9, ..., QUEEN→4/12
 }
 
 constexpr bool is_ok(Square s) { return s >= SQ_A1 && s <= SQ_H8; }

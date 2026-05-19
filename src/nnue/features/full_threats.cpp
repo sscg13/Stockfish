@@ -42,13 +42,13 @@ struct HelperOffsets {
 constexpr Bitboard pseudo_attack_bb(AttackType at, Square s) {
     switch (at)
     {
-    case W_PAWN_DIAG_AT :
+    case W_PAWN_DIAG_AT :  // 0
         return PseudoAttacks[WHITE][s];
-    case W_PAWN_PUSH_AT :
+    case W_PAWN_PUSH_AT :  // 1
         return pawn_single_push_bb(WHITE, square_bb(s));
-    case B_PAWN_DIAG_AT :
+    case B_PAWN_DIAG_AT :  // 8
         return PseudoAttacks[BLACK][s];
-    case B_PAWN_PUSH_AT :
+    case B_PAWN_PUSH_AT :  // 9
         return pawn_single_push_bb(BLACK, square_bb(s));
     case W_KNIGHT_AT :
     case B_KNIGHT_AT :
@@ -67,19 +67,6 @@ constexpr Bitboard pseudo_attack_bb(AttackType at, Square s) {
     }
 }
 
-constexpr auto index_lut2_array() {
-    std::array<std::array<std::array<uint8_t, SQUARE_NB>, SQUARE_NB>, ATTACK_TYPE_NB> out{};
-
-    for (int at = 0; at < ATTACK_TYPE_NB; ++at)
-        for (Square from = SQ_A1; from <= SQ_H8; ++from)
-        {
-            Bitboard attacks = pseudo_attack_bb(AttackType(at), from);
-            for (Square to = SQ_A1; to <= SQ_H8; ++to)
-                out[at][from][to] = constexpr_popcount(((1ULL << to) - 1) & attacks);
-        }
-
-    return out;
-}
 
 constexpr auto init_threat_offsets() {
     std::array<HelperOffsets, ATTACK_TYPE_NB>                    indices{};
@@ -147,13 +134,55 @@ constexpr auto init_index_luts() {
     return lut;
 }
 
+// Number of geometrically distinct rows stored in index_lut2.
+// Non-pawn B_ AttackTypes share geometry with their W_ counterparts (knight/bishop/rook/queen
+// attacks are color-independent). Pawn-push types always evaluate to 0 because the push target
+// is the only bit in the attacks mask, so popcount(bits_below_target & mask) == 0 always;
+// they are mapped to a dedicated all-zero sentinel row (LUT2_PUSH_ROW).
+// B_ non-pawn rows (AT values 10-13) map to the same rows as W_ (AT values 2-5).
+// Result: 7 rows × 64 × 64 = 28 KB.
+static constexpr int LUT2_GEOMETRY_NB = 7;  // 6 unique geometries + 1 zero sentinel
+static constexpr int LUT2_PUSH_ROW    = 6;  // all-zero sentinel for push attack types
+
+// Maps each AttackType to its row in the compacted index_lut2.
+// B_ non-pawn types share geometry with their W_ counterparts.
+// Push types and gap entries (6,7) map to the all-zero sentinel row.
+constexpr std::array<int8_t, ATTACK_TYPE_NB> init_lut2_row_map() {
+    //              W_PD  W_PP           W_N  W_B  W_R  W_Q  gap              gap              B_PD  B_PP           B_N  B_B  B_R  B_Q
+    return         { 0,   LUT2_PUSH_ROW,  1,   2,   3,   4,  LUT2_PUSH_ROW,  LUT2_PUSH_ROW,   5,    LUT2_PUSH_ROW,  1,   2,   3,   4  };
+}
+
+constexpr auto lut2_row_map = init_lut2_row_map();
+
+constexpr auto index_lut2_array() {
+    std::array<std::array<std::array<uint8_t, SQUARE_NB>, SQUARE_NB>, LUT2_GEOMETRY_NB> out{};
+
+    // Fill each unique geometry row; LUT2_PUSH_ROW stays all-zero (value-initialized above).
+    // B_ non-pawn types map to the same row as their W_ counterpart and write identical data.
+    for (int at = 0; at < ATTACK_TYPE_NB; ++at)
+    {
+        int row = lut2_row_map[at];
+        if (row == LUT2_PUSH_ROW)
+            continue;
+        for (Square from = SQ_A1; from <= SQ_H8; ++from)
+        {
+            Bitboard attacks = pseudo_attack_bb(AttackType(at), from);
+            for (Square to = SQ_A1; to <= SQ_H8; ++to)
+                out[row][from][to] = constexpr_popcount(((1ULL << to) - 1) & attacks);
+        }
+    }
+
+    return out;
+}
+
 // The final index is calculated from summing data found in these two LUTs, as well
 // as offsets[at][from].
 
 // [at][tt][from_oriented < to_oriented]
 constexpr auto index_lut1 = init_index_luts();
-// [at][from][to]
+// [geometry_row][from][to] — rank of 'to' among squares attacked by the piece at 'from'
 constexpr auto index_lut2 = index_lut2_array();
+
 
 // Verify Dimensions matches the value computed by init_threat_offsets.
 static_assert([] {
@@ -178,14 +207,13 @@ inline sf_always_inline IndexType FullThreats::make_index(
     unsigned     to_oriented   = uint8_t(to) ^ orientation;
 
     // Flip W<->B when computing from Black's perspective.
-    AttackType at_oriented =
-      (perspective == BLACK) ? AttackType(at < 6 ? at + 6 : at - 6) : at;
-    TargetType tt_oriented =
-      (perspective == BLACK) ? TargetType(tt < 5 ? tt + 5 : tt - 5) : tt;
+    // Spacing-8 enum layout: XOR with (perspective<<3) swaps 0-5 ↔ 8-13 and 0-4 ↔ 8-12.
+    AttackType at_oriented = AttackType(uint8_t(at) ^ (uint8_t(perspective) << 3));
+    TargetType tt_oriented = TargetType(uint8_t(tt) ^ (uint8_t(perspective) << 3));
 
     return index_lut1[at_oriented][tt_oriented][from_oriented < to_oriented]
          + offsets[at_oriented][from_oriented]
-         + index_lut2[at_oriented][from_oriented][to_oriented];
+         + index_lut2[lut2_row_map[at_oriented]][from_oriented][to_oriented];
 }
 
 // Get a list of indices for active features in ascending order
