@@ -133,6 +133,15 @@ constexpr Bitboard pawn_single_push_bb(Color c, Bitboard b) {
     return c == WHITE ? shift<NORTH>(b) : shift<SOUTH>(b);
 }
 
+// Returns the squares that can host a pawn forming a "pawn pair" with a pawn
+// on s: own file plus adjacent files, restricted to ranks 2-7, excluding s.
+// The geometry is color-independent.
+constexpr Bitboard pawn_pair_bb(Square s) {
+    Bitboard file  = file_bb(s);
+    Bitboard files = file | shift<EAST>(file) | shift<WEST>(file);
+    return files & ~(Rank1BB | Rank8BB) & ~square_bb(s);
+}
+
 // distance() functions return the distance between x and y, defined as the
 // number of steps for a king in x to reach y.
 

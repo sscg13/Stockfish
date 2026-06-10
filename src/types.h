@@ -216,8 +216,8 @@ enum Piece : u8 {
 // clang-format on
 
 // Attack pattern type — White-absolute color encoding.
-// W values are 0-5, B values are 8-13 (gap at 6-7), so that perspective flip is a
-// single XOR: at_oriented = at ^ (perspective << 3).
+// W values are 0-6, B values are 8-14 (gap at 7 and 15), so that perspective flip is
+// a single XOR: at_oriented = at ^ (perspective << 3).
 enum AttackType : u8 {
     W_PAWN_DIAG_AT = 0,
     W_PAWN_PUSH_AT = 1,
@@ -225,14 +225,16 @@ enum AttackType : u8 {
     W_BISHOP_AT    = 3,
     W_ROOK_AT      = 4,
     W_QUEEN_AT     = 5,
-    // values 6-7 are unused gaps
+    W_PAWN_PAIR_AT = 6,
+    // value 7 is an unused gap
     B_PAWN_DIAG_AT = 8,
     B_PAWN_PUSH_AT = 9,
     B_KNIGHT_AT    = 10,
     B_BISHOP_AT    = 11,
     B_ROOK_AT      = 12,
     B_QUEEN_AT     = 13,
-    ATTACK_TYPE_NB = 14
+    B_PAWN_PAIR_AT = 14,
+    ATTACK_TYPE_NB = 15
 };
 
 // Target piece identity — White-absolute color encoding (KING excluded).
@@ -370,10 +372,14 @@ struct DirtyThreat {
 // Moving a piece also can reveal at most 8 discovered attacks.
 // This implies that a non-castling move can change at most (8 + 16) * 3 + 8 = 80 features.
 // By similar logic, a castling move can change at most (5 + 1 + 3 + 9) * 2 = 36 features.
-// Thus, 80 should work as an upper bound. Finally, 16 entries are added to accommodate
-// unmasked vector stores near the end of the list.
+// Pawn-pair features: each pawn add/remove event contributes at most 15 partners
+// x 2 directed entries = 30; at most 3 pawn add/remove events occur per move
+// (pawn-takes-pawn, en passant), so pairs add at most 90 entries.
+// Thus 80 + 90 = 170 works as an upper bound. Finally, 16 entries are added to
+// accommodate unmasked vector stores near the end of the list, and the size is
+// rounded up to 192.
 
-using DirtyThreatList = ValueList<DirtyThreat, 96>;
+using DirtyThreatList = ValueList<DirtyThreat, 192>;
 
 struct DirtyThreats {
     DirtyThreatList list;

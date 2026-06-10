@@ -1303,6 +1303,26 @@ void Position::update_piece_threats(Piece               pc,
         if (is_ok(blackPushSrc) && piece_on(blackPushSrc) == B_PAWN)
             add_dirty_threat(dts, putPiece, B_PAWN_PUSH_AT, make_target_type(pc),
                              blackPushSrc, s);
+
+        // Pawn-pair features: static geometric relation between pc and every pawn
+        // at most one file apart. Always emit both directed entries of each pair;
+        // the semi-exclusion in make_index keeps exactly one per perspective.
+        // Scalar on all build paths: write_multiple_dirties' piece->type conversion
+        // would derive the DIAG AttackType from a pawn, which is wrong for pairs.
+        {
+            const AttackType pairAT   = c == WHITE ? W_PAWN_PAIR_AT : B_PAWN_PAIR_AT;
+            Bitboard         partners = pawn_pair_bb(s) & pieces(PAWN);
+            while (partners)
+            {
+                Square t       = pop_lsb(partners);
+                Piece  partner = piece_on(t);
+
+                add_dirty_threat(dts, putPiece, pairAT, make_target_type(partner), s, t);
+                add_dirty_threat(dts, putPiece,
+                                 color_of(partner) == WHITE ? W_PAWN_PAIR_AT : B_PAWN_PAIR_AT,
+                                 make_target_type(pc), t, s);
+            }
+        }
     }
     else
     {

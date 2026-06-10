@@ -63,6 +63,9 @@ constexpr Bitboard pseudo_attack_bb(AttackType at, Square s) {
     case W_QUEEN_AT :
     case B_QUEEN_AT :
         return Attacks::PseudoAttacks[QUEEN][s];
+    case W_PAWN_PAIR_AT :  // 6
+    case B_PAWN_PAIR_AT :  // 14
+        return pawn_pair_bb(s);
     default :
         return 0;
     }
@@ -84,8 +87,9 @@ constexpr auto init_threat_offsets() {
     for (int at = 0; at < ATTACK_TYPE_NB; ++at)
     {
         int  cumulativePieceOffset = 0;
-        bool isPawnType            = (at == W_PAWN_DIAG_AT || at == W_PAWN_PUSH_AT
-                           || at == B_PAWN_DIAG_AT || at == B_PAWN_PUSH_AT);
+        bool isPawnType =
+          (at == W_PAWN_DIAG_AT || at == W_PAWN_PUSH_AT || at == W_PAWN_PAIR_AT
+           || at == B_PAWN_DIAG_AT || at == B_PAWN_PUSH_AT || at == B_PAWN_PAIR_AT);
 
         for (Square from = SQ_A1; from <= SQ_H8; ++from)
         {
@@ -140,16 +144,18 @@ constexpr auto init_index_luts() {
 // is the only bit in the attacks mask, so popcount(bits_below_target & mask) == 0 always;
 // they are mapped to a dedicated all-zero sentinel row (LUT2_PUSH_ROW).
 // B_ non-pawn rows (AT values 10-13) map to the same rows as W_ (AT values 2-5).
-// Result: 7 rows × 64 × 64 = 28 KB.
-static constexpr int LUT2_GEOMETRY_NB = 7;  // 6 unique geometries + 1 zero sentinel
+// Pawn-pair types share a single color-independent geometry row (LUT2_PAIR_ROW).
+// Result: 8 rows × 64 × 64 = 32 KB.
+static constexpr int LUT2_GEOMETRY_NB = 8;  // 7 unique geometries + 1 zero sentinel
 static constexpr int LUT2_PUSH_ROW    = 6;  // all-zero sentinel for push attack types
+static constexpr int LUT2_PAIR_ROW    = 7;  // shared geometry row for pawn-pair types
 
 // Maps each AttackType to its row in the compacted index_lut2.
 // B_ non-pawn types share geometry with their W_ counterparts.
-// Push types and gap entries (6,7) map to the all-zero sentinel row.
+// Push types and the gap entry (7) map to the all-zero sentinel row.
 constexpr std::array<int8_t, ATTACK_TYPE_NB> init_lut2_row_map() {
-    //              W_PD  W_PP           W_N  W_B  W_R  W_Q  gap              gap              B_PD  B_PP           B_N  B_B  B_R  B_Q
-    return         { 0,   LUT2_PUSH_ROW,  1,   2,   3,   4,  LUT2_PUSH_ROW,  LUT2_PUSH_ROW,   5,    LUT2_PUSH_ROW,  1,   2,   3,   4  };
+    //              W_PD  W_PP           W_N  W_B  W_R  W_Q  W_PAIR         gap              B_PD  B_PP           B_N  B_B  B_R  B_Q  B_PAIR
+    return         { 0,   LUT2_PUSH_ROW,  1,   2,   3,   4,  LUT2_PAIR_ROW, LUT2_PUSH_ROW,   5,    LUT2_PUSH_ROW,  1,   2,   3,   4,  LUT2_PAIR_ROW };
 }
 
 constexpr auto lut2_row_map = init_lut2_row_map();
@@ -259,6 +265,28 @@ void FullThreats::append_active_indices(Color perspective, const Position& pos, 
                 process_pawn(shift<SOUTH_WEST>(cPawns) & occupiedNoK, SOUTH_WEST, false);
                 process_pawn(shift<SOUTH_EAST>(cPawns) & occupiedNoK, SOUTH_EAST, false);
                 process_pawn(shift<SOUTH>(pushers), SOUTH, true);
+            }
+
+            // Pawn-pair features: a static geometric relation between any two pawns
+            // at most one file apart. Both directed entries of every pair are
+            // emitted (across the two color loops / within this loop for same-color
+            // pairs); the semi-exclusion in make_index keeps exactly one of the two
+            // per perspective.
+            {
+                const AttackType pairAT = c == WHITE ? W_PAWN_PAIR_AT : B_PAWN_PAIR_AT;
+                Bitboard         bb     = cPawns;
+                while (bb)
+                {
+                    Square   from    = pop_lsb(bb);
+                    Bitboard targets = pawn_pair_bb(from) & pawns;
+                    while (targets)
+                    {
+                        Square     to    = pop_lsb(targets);
+                        TargetType tt    = make_target_type(pos.piece_on(to));
+                        IndexType  index = make_index(perspective, pairAT, from, to, tt, ksq);
+                        active.push_back_if_lt(index, Dimensions);
+                    }
+                }
             }
         }
 

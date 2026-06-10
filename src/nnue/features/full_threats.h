@@ -35,10 +35,10 @@ class FullThreats {
     static constexpr const char* Name = "Full_Threats(Friend)";
 
     // Hash value embedded in the evaluation file
-    static constexpr u32 HashValue = 0x7a4e1b2cu;
+    static constexpr u32 HashValue = 0x8c5d3e4fu;
 
     // Number of feature dimensions
-    static constexpr IndexType Dimensions = 60336;
+    static constexpr IndexType Dimensions = 63312;
 
     // clang-format off
     // Orient a square according to perspective (rotates by 180 for black)
@@ -56,7 +56,7 @@ class FullThreats {
     // Slot index for each (AttackType, TargetType) pair.
     // -1 = fully excluded (never a valid feature).
     // >= 0 = contiguous slot index used to compute the feature base offset.
-    // Rows at AT indices 6-7 (gaps) and columns at TT indices 5-7 (gaps) are all -1.
+    // The row at AT index 7 (gap) and columns at TT indices 5-7 (gaps) are all -1.
     static constexpr std::int8_t slot_map[ATTACK_TYPE_NB][TARGET_TYPE_NB] = {
       //                  W_P  W_N  W_B  W_R  W_Q  g5   g6   g7   B_P  B_N  B_B  B_R  B_Q
       /* W_PAWN_DIAG */ {  0,   1,  -1,   2,  -1,  -1,  -1,  -1,   3,   4,  -1,   5,  -1},
@@ -65,7 +65,7 @@ class FullThreats {
       /* W_BISHOP    */ {  0,   1,   2,   3,  -1,  -1,  -1,  -1,   4,   5,   6,   7,  -1},
       /* W_ROOK      */ {  0,   1,   2,   3,  -1,  -1,  -1,  -1,   4,   5,   6,   7,  -1},
       /* W_QUEEN     */ {  0,   1,   2,   3,   4,  -1,  -1,  -1,   5,   6,   7,   8,   9},
-      /* gap_6       */ { -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1},
+      /* W_PAWN_PAIR */ {  0,  -1,  -1,  -1,  -1,  -1,  -1,  -1,   1,  -1,  -1,  -1,  -1},
       /* gap_7       */ { -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1},
       /* B_PAWN_DIAG */ {  0,   1,  -1,   2,  -1,  -1,  -1,  -1,   3,   4,  -1,   5,  -1},
       /* B_PAWN_PUSH */ {  0,  -1,  -1,  -1,  -1,  -1,  -1,  -1,   1,  -1,  -1,  -1,  -1},
@@ -73,6 +73,7 @@ class FullThreats {
       /* B_BISHOP    */ {  0,   1,   2,   3,  -1,  -1,  -1,  -1,   4,   5,   6,   7,  -1},
       /* B_ROOK      */ {  0,   1,   2,   3,  -1,  -1,  -1,  -1,   4,   5,   6,   7,  -1},
       /* B_QUEEN     */ {  0,   1,   2,   3,   4,  -1,  -1,  -1,   5,   6,   7,   8,   9},
+      /* B_PAWN_PAIR */ {  0,  -1,  -1,  -1,  -1,  -1,  -1,  -1,   1,  -1,  -1,  -1,  -1},
     };
 
     // Semi-exclusion: true = only active when from_oriented >= to_oriented.
@@ -86,7 +87,7 @@ class FullThreats {
       /* W_BISHOP    */ {false, false,  true, false, false, false, false, false, false, false,  true, false, false},
       /* W_ROOK      */ {false, false, false,  true, false, false, false, false, false, false, false,  true, false},
       /* W_QUEEN     */ {false, false, false, false,  true, false, false, false, false, false, false, false,  true},
-      /* gap_6       */ {false, false, false, false, false, false, false, false, false, false, false, false, false},
+      /* W_PAWN_PAIR */ { true, false, false, false, false, false, false, false,  true, false, false, false, false},
       /* gap_7       */ {false, false, false, false, false, false, false, false, false, false, false, false, false},
       /* B_PAWN_DIAG */ { true, false, false, false, false, false, false, false, false, false, false, false, false},
       /* B_PAWN_PUSH */ {false, false, false, false, false, false, false, false, false, false, false, false, false},
@@ -94,6 +95,7 @@ class FullThreats {
       /* B_BISHOP    */ {false, false,  true, false, false, false, false, false, false, false,  true, false, false},
       /* B_ROOK      */ {false, false, false,  true, false, false, false, false, false, false, false,  true, false},
       /* B_QUEEN     */ {false, false, false, false,  true, false, false, false, false, false, false, false,  true},
+      /* B_PAWN_PAIR */ { true, false, false, false, false, false, false, false,  true, false, false, false, false},
     };
     // clang-format on
 
@@ -105,7 +107,7 @@ class FullThreats {
     };
 
     // Maximum number of simultaneously active features.
-    static constexpr IndexType MaxActiveDimensions = 128;
+    static constexpr IndexType MaxActiveDimensions = 224;
     using IndexList                                = ValueList<IndexType, MaxActiveDimensions>;
     using DiffType                                 = DirtyThreats;
 
