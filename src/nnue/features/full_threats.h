@@ -18,7 +18,6 @@
 #ifndef NNUE_FEATURES_FULL_THREATS_INCLUDED
 #define NNUE_FEATURES_FULL_THREATS_INCLUDED
 
-#include <cstdint>
 
 #include "../../misc.h"
 #include "../../types.h"
@@ -36,14 +35,14 @@ class FullThreats {
     static constexpr const char* Name = "Full_Threats(Friend)";
 
     // Hash value embedded in the evaluation file
-    static constexpr std::uint32_t HashValue = 0x7a4e1b2cu;
+    static constexpr u32 HashValue = 0x7a4e1b2cu;
 
     // Number of feature dimensions
     static constexpr IndexType Dimensions = 60336;
 
     // clang-format off
     // Orient a square according to perspective (rotates by 180 for black)
-    static constexpr std::int8_t OrientTBL[SQUARE_NB] = {
+    static constexpr i8 OrientTBL[SQUARE_NB] = {
         SQ_A1, SQ_A1, SQ_A1, SQ_A1, SQ_H1, SQ_H1, SQ_H1, SQ_H1,
         SQ_A1, SQ_A1, SQ_A1, SQ_A1, SQ_H1, SQ_H1, SQ_H1, SQ_H1,
         SQ_A1, SQ_A1, SQ_A1, SQ_A1, SQ_H1, SQ_H1, SQ_H1, SQ_H1,

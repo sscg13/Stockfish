@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <utility>
 
+#include "../../attacks.h"
 #include "../../bitboard.h"
 #include "../../misc.h"
 #include "../../position.h"
@@ -43,30 +44,29 @@ constexpr Bitboard pseudo_attack_bb(AttackType at, Square s) {
     switch (at)
     {
     case W_PAWN_DIAG_AT :  // 0
-        return PseudoAttacks[WHITE][s];
+        return Attacks::PseudoAttacks[WHITE][s];
     case W_PAWN_PUSH_AT :  // 1
         return pawn_single_push_bb(WHITE, square_bb(s));
     case B_PAWN_DIAG_AT :  // 8
-        return PseudoAttacks[BLACK][s];
+        return Attacks::PseudoAttacks[BLACK][s];
     case B_PAWN_PUSH_AT :  // 9
         return pawn_single_push_bb(BLACK, square_bb(s));
     case W_KNIGHT_AT :
     case B_KNIGHT_AT :
-        return PseudoAttacks[KNIGHT][s];
+        return Attacks::PseudoAttacks[KNIGHT][s];
     case W_BISHOP_AT :
     case B_BISHOP_AT :
-        return PseudoAttacks[BISHOP][s];
+        return Attacks::PseudoAttacks[BISHOP][s];
     case W_ROOK_AT :
     case B_ROOK_AT :
-        return PseudoAttacks[ROOK][s];
+        return Attacks::PseudoAttacks[ROOK][s];
     case W_QUEEN_AT :
     case B_QUEEN_AT :
-        return PseudoAttacks[QUEEN][s];
+        return Attacks::PseudoAttacks[QUEEN][s];
     default :
         return 0;
     }
 }
-
 
 constexpr auto init_threat_offsets() {
     std::array<HelperOffsets, ATTACK_TYPE_NB>                    indices{};
@@ -89,8 +89,8 @@ constexpr auto init_threat_offsets() {
 
         for (Square from = SQ_A1; from <= SQ_H8; ++from)
         {
-            offsets[at][from]    = cumulativePieceOffset;
-            bool inPawnRange     = (from >= SQ_A2 && from <= SQ_H7);
+            offsets[at][from] = cumulativePieceOffset;
+            bool inPawnRange  = (from >= SQ_A2 && from <= SQ_H7);
             if (!isPawnType || inPawnRange)
                 cumulativePieceOffset +=
                   constexpr_popcount(pseudo_attack_bb(AttackType(at), from));
@@ -108,7 +108,7 @@ constexpr auto helper_offsets = init_threat_offsets().first;
 constexpr auto offsets = init_threat_offsets().second;
 
 constexpr auto init_index_luts() {
-    std::array<std::array<std::array<uint32_t, 2>, TARGET_TYPE_NB>, ATTACK_TYPE_NB> lut{};
+    std::array<std::array<std::array<u32, 2>, TARGET_TYPE_NB>, ATTACK_TYPE_NB> lut{};
 
     for (int at = 0; at < ATTACK_TYPE_NB; ++at)
     {
@@ -202,14 +202,14 @@ static_assert([] {
 // Index of a feature for a given king position and threat relationship
 inline sf_always_inline IndexType FullThreats::make_index(
   Color perspective, AttackType at, Square from, Square to, TargetType tt, Square ksq) {
-    const int8_t orientation   = OrientTBL[ksq] ^ (56 * perspective);
-    unsigned     from_oriented = uint8_t(from) ^ orientation;
-    unsigned     to_oriented   = uint8_t(to) ^ orientation;
+    const i8 orientation   = OrientTBL[ksq] ^ (56 * perspective);
+    unsigned from_oriented = u8(from) ^ orientation;
+    unsigned to_oriented   = u8(to) ^ orientation;
 
     // Flip W<->B when computing from Black's perspective.
     // Spacing-8 enum layout: XOR with (perspective<<3) swaps 0-5 ↔ 8-13 and 0-4 ↔ 8-12.
-    AttackType at_oriented = AttackType(uint8_t(at) ^ (uint8_t(perspective) << 3));
-    TargetType tt_oriented = TargetType(uint8_t(tt) ^ (uint8_t(perspective) << 3));
+    AttackType at_oriented = AttackType(u8(at) ^ (u8(perspective) << 3));
+    TargetType tt_oriented = TargetType(u8(tt) ^ (u8(perspective) << 3));
 
     return index_lut1[at_oriented][tt_oriented][from_oriented < to_oriented]
          + offsets[at_oriented][from_oriented]
@@ -270,7 +270,7 @@ void FullThreats::append_active_indices(Color perspective, const Position& pos, 
             while (bb)
             {
                 Square   from    = pop_lsb(bb);
-                Bitboard attacks = attacks_bb(pt, from, occupied) & occupiedNoK;
+                Bitboard attacks = Attacks::attacks_bb(pt, from, occupied) & occupiedNoK;
                 while (attacks)
                 {
                     Square     to       = pop_lsb(attacks);
@@ -345,7 +345,7 @@ void FullThreats::append_changed_indices(Color                   perspective,
 }
 
 bool FullThreats::requires_refresh(const DiffType& diff, Color perspective) {
-    return perspective == diff.us && (int8_t(diff.ksq) & 0b100) != (int8_t(diff.prevKsq) & 0b100);
+    return perspective == diff.us && (i8(diff.ksq) & 0b100) != (i8(diff.prevKsq) & 0b100);
 }
 
 }  // namespace Stockfish::Eval::NNUE::Features
