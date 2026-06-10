@@ -45,12 +45,11 @@ constexpr Bitboard pseudo_attack_bb(AttackType at, Square s) {
     {
     case W_PAWN_DIAG_AT :  // 0
         return Attacks::PseudoAttacks[WHITE][s];
-    case W_PAWN_PUSH_AT :  // 1
-        return pawn_single_push_bb(WHITE, square_bb(s));
     case B_PAWN_DIAG_AT :  // 8
         return Attacks::PseudoAttacks[BLACK][s];
-    case B_PAWN_PUSH_AT :  // 9
-        return pawn_single_push_bb(BLACK, square_bb(s));
+    case W_PAWN_PAIR_AT :  // 1
+    case B_PAWN_PAIR_AT :  // 9
+        return pawn_pair_bb(s);
     case W_KNIGHT_AT :
     case B_KNIGHT_AT :
         return Attacks::PseudoAttacks[KNIGHT][s];
@@ -63,9 +62,6 @@ constexpr Bitboard pseudo_attack_bb(AttackType at, Square s) {
     case W_QUEEN_AT :
     case B_QUEEN_AT :
         return Attacks::PseudoAttacks[QUEEN][s];
-    case W_PAWN_PAIR_AT :  // 6
-    case B_PAWN_PAIR_AT :  // 14
-        return pawn_pair_bb(s);
     default :
         return 0;
     }
@@ -87,9 +83,8 @@ constexpr auto init_threat_offsets() {
     for (int at = 0; at < ATTACK_TYPE_NB; ++at)
     {
         int  cumulativePieceOffset = 0;
-        bool isPawnType =
-          (at == W_PAWN_DIAG_AT || at == W_PAWN_PUSH_AT || at == W_PAWN_PAIR_AT
-           || at == B_PAWN_DIAG_AT || at == B_PAWN_PUSH_AT || at == B_PAWN_PAIR_AT);
+        bool isPawnType = (at == W_PAWN_DIAG_AT || at == W_PAWN_PAIR_AT || at == B_PAWN_DIAG_AT
+                           || at == B_PAWN_PAIR_AT);
 
         for (Square from = SQ_A1; from <= SQ_H8; ++from)
         {
@@ -140,22 +135,19 @@ constexpr auto init_index_luts() {
 
 // Number of geometrically distinct rows stored in index_lut2.
 // Non-pawn B_ AttackTypes share geometry with their W_ counterparts (knight/bishop/rook/queen
-// attacks are color-independent). Pawn-push types always evaluate to 0 because the push target
-// is the only bit in the attacks mask, so popcount(bits_below_target & mask) == 0 always;
-// they are mapped to a dedicated all-zero sentinel row (LUT2_PUSH_ROW).
-// B_ non-pawn rows (AT values 10-13) map to the same rows as W_ (AT values 2-5).
-// Pawn-pair types share a single color-independent geometry row (LUT2_PAIR_ROW).
-// Result: 8 rows × 64 × 64 = 32 KB.
-static constexpr int LUT2_GEOMETRY_NB = 8;  // 7 unique geometries + 1 zero sentinel
-static constexpr int LUT2_PUSH_ROW    = 6;  // all-zero sentinel for push attack types
-static constexpr int LUT2_PAIR_ROW    = 7;  // shared geometry row for pawn-pair types
+// attacks are color-independent). B_ non-pawn rows (AT values 10-13) map to the same rows as
+// W_ (AT values 2-5). Pawn-pair types share a single color-independent geometry row
+// (LUT2_PAIR_ROW). The unused gap AttackTypes (6,7) map to row 0 but are never queried since
+// their slot_map rows are all -1. Result: 7 rows × 64 × 64 = 28 KB.
+static constexpr int LUT2_GEOMETRY_NB = 7;  // W_PD, PAIR, N, B, R, Q, B_PD
+static constexpr int LUT2_PAIR_ROW    = 1;  // shared geometry row for pawn-pair types
 
 // Maps each AttackType to its row in the compacted index_lut2.
 // B_ non-pawn types share geometry with their W_ counterparts.
-// Push types and the gap entry (7) map to the all-zero sentinel row.
+// The gap entries (6,7) map to row 0 (never queried; slot_map rows are all -1).
 constexpr std::array<int8_t, ATTACK_TYPE_NB> init_lut2_row_map() {
-    //              W_PD  W_PP           W_N  W_B  W_R  W_Q  W_PAIR         gap              B_PD  B_PP           B_N  B_B  B_R  B_Q  B_PAIR
-    return         { 0,   LUT2_PUSH_ROW,  1,   2,   3,   4,  LUT2_PAIR_ROW, LUT2_PUSH_ROW,   5,    LUT2_PUSH_ROW,  1,   2,   3,   4,  LUT2_PAIR_ROW };
+    //              W_PD  W_PAIR         W_N  W_B  W_R  W_Q  gap  gap   B_PD  B_PAIR         B_N  B_B  B_R  B_Q
+    return         { 0,   LUT2_PAIR_ROW,  2,   3,   4,   5,  0,   0,    6,    LUT2_PAIR_ROW,  2,   3,   4,   5 };
 }
 
 constexpr auto lut2_row_map = init_lut2_row_map();
@@ -163,13 +155,15 @@ constexpr auto lut2_row_map = init_lut2_row_map();
 constexpr auto index_lut2_array() {
     std::array<std::array<std::array<uint8_t, SQUARE_NB>, SQUARE_NB>, LUT2_GEOMETRY_NB> out{};
 
-    // Fill each unique geometry row; LUT2_PUSH_ROW stays all-zero (value-initialized above).
+    // Fill each unique geometry row.
     // B_ non-pawn types map to the same row as their W_ counterpart and write identical data.
     for (int at = 0; at < ATTACK_TYPE_NB; ++at)
     {
-        int row = lut2_row_map[at];
-        if (row == LUT2_PUSH_ROW)
+        // Skip the unused gap AttackTypes (6,7): they map to row 0 but their
+        // pseudo-attacks are empty, which would clobber the W_PAWN_DIAG row.
+        if (at == 6 || at == 7)
             continue;
+        int row = lut2_row_map[at];
         for (Square from = SQ_A1; from <= SQ_H8; ++from)
         {
             Bitboard attacks = pseudo_attack_bb(AttackType(at), from);
@@ -237,34 +231,32 @@ void FullThreats::append_active_indices(Color perspective, const Position& pos, 
         {
             const Piece    attacker = make_piece(c, PAWN);
             const Bitboard cPawns   = pos.pieces(c, PAWN);
-            // Pawns blocked by another pawn directly in front of them.
-            const Bitboard pushers = pawn_single_push_bb(~c, pawns) & cPawns;
 
-            auto process_pawn = [&](Bitboard targets, Direction dir, bool isPush) {
-                AttackType at = make_attack_type(attacker, isPush);
+            // Diagonal pawn threats, excluding pawn targets (pawn-on-pawn co-presence
+            // is captured by the PAWN_PAIR features below).
+            const Bitboard diagTargets = occupiedNoK & ~pawns;
+            auto           process_pawn = [&](Bitboard targets, Direction dir) {
+                AttackType at = make_attack_type(attacker);
                 while (targets)
                 {
                     Square     to       = pop_lsb(targets);
                     Square     from     = to - dir;
                     Piece      attacked = pos.piece_on(to);
-                    assert(!isPush || type_of(attacked) == PAWN);
-                    TargetType tt    = make_target_type(attacked);
-                    IndexType  index = make_index(perspective, at, from, to, tt, ksq);
+                    TargetType tt       = make_target_type(attacked);
+                    IndexType  index    = make_index(perspective, at, from, to, tt, ksq);
                     active.push_back_if_lt(index, Dimensions);
                 }
             };
 
             if (c == WHITE)
             {
-                process_pawn(shift<NORTH_EAST>(cPawns) & occupiedNoK, NORTH_EAST, false);
-                process_pawn(shift<NORTH_WEST>(cPawns) & occupiedNoK, NORTH_WEST, false);
-                process_pawn(shift<NORTH>(pushers), NORTH, true);
+                process_pawn(shift<NORTH_EAST>(cPawns) & diagTargets, NORTH_EAST);
+                process_pawn(shift<NORTH_WEST>(cPawns) & diagTargets, NORTH_WEST);
             }
             else
             {
-                process_pawn(shift<SOUTH_WEST>(cPawns) & occupiedNoK, SOUTH_WEST, false);
-                process_pawn(shift<SOUTH_EAST>(cPawns) & occupiedNoK, SOUTH_EAST, false);
-                process_pawn(shift<SOUTH>(pushers), SOUTH, true);
+                process_pawn(shift<SOUTH_WEST>(cPawns) & diagTargets, SOUTH_WEST);
+                process_pawn(shift<SOUTH_EAST>(cPawns) & diagTargets, SOUTH_EAST);
             }
 
             // Pawn-pair features: a static geometric relation between any two pawns

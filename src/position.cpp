@@ -1191,7 +1191,7 @@ void write_multiple_dirties(const Position& p,
     if constexpr (ConvertToAttackType)
     {
         // AT = piece - ((piece & 7) == 1)
-        // XOR-spacing-8 layout: W=0-5, B=8-13. Diagonal-only; push cases emitted by separate scalar calls.
+        // XOR-spacing-8 layout: W=0-5, B=8-13. Pawns map to the diagonal AttackType.
         __mmask16 pawn_mask  = _mm512_cmpeq_epi32_mask(
           _mm512_and_epi32(threat_pieces, _mm512_set1_epi32(7)), _mm512_set1_epi32(1));
         __m512i is_pawn = _mm512_mask_set1_epi32(_mm512_setzero_si512(), pawn_mask, 1);
@@ -1273,36 +1273,16 @@ void Position::update_piece_threats(Piece               pc,
     Bitboard threatened = attacks_bb(pc, s, occupied) & occupiedNoK;
     Bitboard incoming_threats = (PseudoAttacks[KNIGHT][s] & knights);
 
-    // Compute both incoming and outgoing pawn threats. Push threats are only relevant when
-    // 'pc' is a pawn (push features only exist for pawn-vs-pawn pairs).
+    // Diagonal pawn threats no longer target pawns (pawn-on-pawn co-presence is
+    // captured by the PAWN_PAIR features). For a pawn at s the only pawn-vs-pawn
+    // relations are pair features; for a non-pawn at s the incoming diagonal pawn
+    // attacks are unchanged.
     if (type_of(pc) == PAWN)
     {
         Color c = color_of(pc);
 
-        // Outgoing push: the square directly in front, only when occupied by a pawn.
-        {
-            AttackType pushAT      = make_attack_type(pc, true);
-            Bitboard   pushTargets = pawn_single_push_bb(c, square_bb(s)) & pieces(PAWN);
-            while (pushTargets)
-            {
-                Square tgt = pop_lsb(pushTargets);
-                add_dirty_threat(dts, putPiece, pushAT, make_target_type(piece_on(tgt)), s, tgt);
-            }
-        }
-
-        // Incoming diagonal pawn threats to s.
-        incoming_threats |= PseudoAttacks[WHITE][s] & blackPawns;
-        incoming_threats |= PseudoAttacks[BLACK][s] & whitePawns;
-
-        // Incoming push threats: pawns whose advance is blocked by pc at s.
-        Square whitePushSrc = Square(s - NORTH);
-        if (is_ok(whitePushSrc) && piece_on(whitePushSrc) == W_PAWN)
-            add_dirty_threat(dts, putPiece, W_PAWN_PUSH_AT, make_target_type(pc),
-                             whitePushSrc, s);
-        Square blackPushSrc = Square(s + NORTH);
-        if (is_ok(blackPushSrc) && piece_on(blackPushSrc) == B_PAWN)
-            add_dirty_threat(dts, putPiece, B_PAWN_PUSH_AT, make_target_type(pc),
-                             blackPushSrc, s);
+        // Outgoing diagonal threats exclude pawn targets.
+        threatened &= ~pieces(PAWN);
 
         // Pawn-pair features: static geometric relation between pc and every pawn
         // at most one file apart. Always emit both directed entries of each pair;
@@ -1333,7 +1313,7 @@ void Position::update_piece_threats(Piece               pc,
 #ifdef USE_AVX512ICL
     {
         // Outgoing: AT is constant (diagonal for pawns), TT varies per target piece.
-        AttackType  at_pc       = make_attack_type(pc, false);
+        AttackType  at_pc       = make_attack_type(pc);
         DirtyThreat dt_template = {at_pc, TargetType(0), s, Square(0), putPiece};
         write_multiple_dirties<DirtyThreat::ThreatenedSqOffset, DirtyThreat::TargetTypeOffset,
                                false>(*this, threatened, dt_template, dts);

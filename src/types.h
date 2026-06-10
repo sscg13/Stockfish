@@ -216,25 +216,24 @@ enum Piece : u8 {
 // clang-format on
 
 // Attack pattern type — White-absolute color encoding.
-// W values are 0-6, B values are 8-14 (gap at 7 and 15), so that perspective flip is
-// a single XOR: at_oriented = at ^ (perspective << 3).
+// W values are 0-5, B values are 8-13 (gaps at 6,7 and 14,15), so that perspective flip
+// is a single XOR: at_oriented = at ^ (perspective << 3).
 enum AttackType : u8 {
     W_PAWN_DIAG_AT = 0,
-    W_PAWN_PUSH_AT = 1,
+    W_PAWN_PAIR_AT = 1,
     W_KNIGHT_AT    = 2,
     W_BISHOP_AT    = 3,
     W_ROOK_AT      = 4,
     W_QUEEN_AT     = 5,
-    W_PAWN_PAIR_AT = 6,
-    // value 7 is an unused gap
+    // values 6,7 are unused gaps
     B_PAWN_DIAG_AT = 8,
-    B_PAWN_PUSH_AT = 9,
+    B_PAWN_PAIR_AT = 9,
     B_KNIGHT_AT    = 10,
     B_BISHOP_AT    = 11,
     B_ROOK_AT      = 12,
     B_QUEEN_AT     = 13,
-    B_PAWN_PAIR_AT = 14,
-    ATTACK_TYPE_NB = 15
+    // values 14,15 are unused gaps
+    ATTACK_TYPE_NB = 14
 };
 
 // Target piece identity — White-absolute color encoding (KING excluded).
@@ -377,7 +376,7 @@ struct DirtyThreat {
 // (pawn-takes-pawn, en passant), so pairs add at most 90 entries.
 // Thus 80 + 90 = 170 works as an upper bound. Finally, 16 entries are added to
 // accommodate unmasked vector stores near the end of the list, and the size is
-// rounded up to 192.
+// rounded up to 192. (Removing the pawn-push features only lowers these bounds.)
 
 using DirtyThreatList = ValueList<DirtyThreat, 192>;
 
@@ -438,12 +437,12 @@ constexpr Color color_of(Piece pc) {
     return Color(pc >> 3);
 }
 
-constexpr AttackType make_attack_type(Piece attacker, bool isPush = false) {
+constexpr AttackType make_attack_type(Piece attacker) {
     // Base is 0 for White, 8 for Black — supports XOR perspective flip (at ^ (perspective<<3)).
     int base = (color_of(attacker) == WHITE) ? 0 : 8;
     int pt   = int(type_of(attacker));
-    // PAWN (pt=1): diag→base+0, push→base+1; non-pawn: base+pt (Knight=2,Bishop=3,Rook=4,Queen=5)
-    return AttackType(base + (pt == PAWN ? int(isPush) : pt));
+    // PAWN (pt=1): diag→base+0; non-pawn: base+pt (Knight=2,Bishop=3,Rook=4,Queen=5)
+    return AttackType(base + (pt == PAWN ? 0 : pt));
 }
 
 constexpr TargetType make_target_type(Piece target) {
