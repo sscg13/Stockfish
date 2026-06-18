@@ -240,11 +240,11 @@ enum AttackType : u8 {
 // W values are 0-4, B values are 8-12 (gap at 5-7), so that perspective flip is a
 // single XOR: tt_oriented = tt ^ (perspective << 3).
 enum TargetType : u8 {
-    W_PAWN_TT      = 0,
-    W_KNIGHT_TT    = 1,
-    W_BISHOP_TT    = 2,
-    W_ROOK_TT      = 3,
-    W_QUEEN_TT     = 4,
+    W_PAWN_TT   = 0,
+    W_KNIGHT_TT = 1,
+    W_BISHOP_TT = 2,
+    W_ROOK_TT   = 3,
+    W_QUEEN_TT  = 4,
     // values 5-7 are unused gaps
     B_PAWN_TT      = 8,
     B_KNIGHT_TT    = 9,
@@ -356,12 +356,16 @@ struct DirtyThreat {
              | (u32(threatened_sq) << ThreatenedSqOffset) | (u32(pc_sq) << PcSqOffset);
     }
 
-    AttackType attack_type() const { return static_cast<AttackType>(data >> AttackTypeOffset & 0xf); }
-    TargetType target_type() const { return static_cast<TargetType>(data >> TargetTypeOffset & 0xf); }
-    Square     threatened_sq() const { return static_cast<Square>(data >> ThreatenedSqOffset & 0xff); }
-    Square     pc_sq() const { return static_cast<Square>(data >> PcSqOffset & 0xff); }
-    bool       add() const { return data >> 31; }
-    u32        raw() const { return data; }
+    AttackType attack_type() const {
+        return static_cast<AttackType>(data >> AttackTypeOffset & 0xf);
+    }
+    TargetType target_type() const {
+        return static_cast<TargetType>(data >> TargetTypeOffset & 0xf);
+    }
+    Square threatened_sq() const { return static_cast<Square>(data >> ThreatenedSqOffset & 0xff); }
+    Square pc_sq() const { return static_cast<Square>(data >> PcSqOffset & 0xff); }
+    bool   add() const { return data >> 31; }
+    u32    raw() const { return data; }
 
    private:
     u32 data;
@@ -369,19 +373,47 @@ struct DirtyThreat {
 
 // A piece can be involved in at most 8 outgoing attacks and 16 incoming attacks.
 // Moving a piece also can reveal at most 8 discovered attacks.
-// This implies that a non-castling move can change at most (8 + 16) * 3 + 8 = 80 features.
+// This implies that a non-castling move can change at most (8 + 16) * 3 + 8 = 80 threat features.
 // By similar logic, a castling move can change at most (5 + 1 + 3 + 9) * 2 = 36 features.
-// Pawn-pair features: each pawn add/remove event contributes at most 15 partners
-// x 2 directed entries = 30; at most 3 pawn add/remove events occur per move
-// (pawn-takes-pawn, en passant), so pairs add at most 90 entries.
-// Thus 80 + 90 = 170 works as an upper bound. Finally, 16 entries are added to
-// accommodate unmasked vector stores near the end of the list, and the size is
-// rounded up to 192. (Removing the pawn-push features only lowers these bounds.)
+// 16 entries are added to accommodate unmasked vector stores near the end of the list.
 
-using DirtyThreatList = ValueList<DirtyThreat, 192>;
+using DirtyThreatList = ValueList<DirtyThreat, 96>;
 
 struct DirtyThreats {
     DirtyThreatList list;
+};
+
+// Keep track of what pawn-pair features change on the board (used by NNUE)
+struct DirtyPawnPair {
+    static constexpr int PcSqOffset        = 0;
+    static constexpr int PairedSqOffset    = 8;
+    static constexpr int PairedColorOffset = 16;
+    static constexpr int ColorOffset       = 20;
+
+    DirtyPawnPair() { /* don't initialize data */ }
+    DirtyPawnPair(Color color, Color paired_color, Square pc_sq, Square paired_sq, bool add) {
+        data = (u32(add) << 31) | (u32(color) << ColorOffset)
+             | (u32(paired_color) << PairedColorOffset) | (u32(paired_sq) << PairedSqOffset)
+             | (u32(pc_sq) << PcSqOffset);
+    }
+
+    Color  color() const { return static_cast<Color>(data >> ColorOffset & 0x1); }
+    Color  paired_color() const { return static_cast<Color>(data >> PairedColorOffset & 0x1); }
+    Square paired_sq() const { return static_cast<Square>(data >> PairedSqOffset & 0xff); }
+    Square pc_sq() const { return static_cast<Square>(data >> PcSqOffset & 0xff); }
+    bool   add() const { return data >> 31; }
+
+   private:
+    u32 data;
+};
+
+// Pawn-pair features: each pawn add/remove event contributes at most 15 partners;
+// at most 3 pawn add/remove events occur per move (pawn-takes-pawn, en passant),
+// so 45 entries works as an upper bound.
+using DirtyPawnPairList = ValueList<DirtyPawnPair, 96>;
+
+struct DirtyPawnPairs {
+    DirtyPawnPairList list;
 };
 
     #define ENABLE_INCR_OPERATORS_ON(T) \

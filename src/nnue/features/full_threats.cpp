@@ -47,9 +47,6 @@ constexpr Bitboard pseudo_attack_bb(AttackType at, Square s) {
         return Attacks::PseudoAttacks[WHITE][s];
     case B_PAWN_DIAG_AT :  // 8
         return Attacks::PseudoAttacks[BLACK][s];
-    case W_PAWN_PAIR_AT :  // 1
-    case B_PAWN_PAIR_AT :  // 9
-        return pawn_pair_bb(s);
     case W_KNIGHT_AT :
     case B_KNIGHT_AT :
         return Attacks::PseudoAttacks[KNIGHT][s];
@@ -83,16 +80,14 @@ constexpr auto init_threat_offsets() {
     for (int at = 0; at < ATTACK_TYPE_NB; ++at)
     {
         int  cumulativePieceOffset = 0;
-        bool isPawnType = (at == W_PAWN_DIAG_AT || at == W_PAWN_PAIR_AT || at == B_PAWN_DIAG_AT
-                           || at == B_PAWN_PAIR_AT);
+        bool isPawnType            = (at == W_PAWN_DIAG_AT || at == B_PAWN_DIAG_AT);
 
         for (Square from = SQ_A1; from <= SQ_H8; ++from)
         {
             offsets[at][from] = cumulativePieceOffset;
             bool inPawnRange  = (from >= SQ_A2 && from <= SQ_H7);
             if (!isPawnType || inPawnRange)
-                cumulativePieceOffset +=
-                  constexpr_popcount(pseudo_attack_bb(AttackType(at), from));
+                cumulativePieceOffset += constexpr_popcount(pseudo_attack_bb(AttackType(at), from));
         }
 
         indices[at] = {cumulativePieceOffset, cumulativeOffset};
@@ -136,18 +131,16 @@ constexpr auto init_index_luts() {
 // Number of geometrically distinct rows stored in index_lut2.
 // Non-pawn B_ AttackTypes share geometry with their W_ counterparts (knight/bishop/rook/queen
 // attacks are color-independent). B_ non-pawn rows (AT values 10-13) map to the same rows as
-// W_ (AT values 2-5). Pawn-pair types share a single color-independent geometry row
-// (LUT2_PAIR_ROW). The unused gap AttackTypes (6,7) map to row 0 but are never queried since
-// their slot_map rows are all -1. Result: 7 rows × 64 × 64 = 28 KB.
-static constexpr int LUT2_GEOMETRY_NB = 7;  // W_PD, PAIR, N, B, R, Q, B_PD
-static constexpr int LUT2_PAIR_ROW    = 1;  // shared geometry row for pawn-pair types
+// W_ (AT values 2-5). Pawn-pair and unused gap AttackTypes map to row 0 but are
+// never queried since their slot_map rows are all -1. Result: 6 rows x 64 x 64 = 24 KB.
+static constexpr int LUT2_GEOMETRY_NB = 6;  // W_PD, N, B, R, Q, B_PD
 
 // Maps each AttackType to its row in the compacted index_lut2.
 // B_ non-pawn types share geometry with their W_ counterparts.
 // The gap entries (6,7) map to row 0 (never queried; slot_map rows are all -1).
 constexpr std::array<int8_t, ATTACK_TYPE_NB> init_lut2_row_map() {
-    //              W_PD  W_PAIR         W_N  W_B  W_R  W_Q  gap  gap   B_PD  B_PAIR         B_N  B_B  B_R  B_Q
-    return         { 0,   LUT2_PAIR_ROW,  2,   3,   4,   5,  0,   0,    6,    LUT2_PAIR_ROW,  2,   3,   4,   5 };
+    // W_PAIR/B_PAIR map to row 0 but are excluded by slot_map.
+    return {0, 0, 1, 2, 3, 4, 0, 0, 5, 0, 1, 2, 3, 4};
 }
 
 constexpr auto lut2_row_map = init_lut2_row_map();
@@ -159,9 +152,9 @@ constexpr auto index_lut2_array() {
     // B_ non-pawn types map to the same row as their W_ counterpart and write identical data.
     for (int at = 0; at < ATTACK_TYPE_NB; ++at)
     {
-        // Skip the unused gap AttackTypes (6,7): they map to row 0 but their
+        // Skip the pair and unused gap AttackTypes: they map to row 0 but their
         // pseudo-attacks are empty, which would clobber the W_PAWN_DIAG row.
-        if (at == 6 || at == 7)
+        if (at == W_PAWN_PAIR_AT || at == 6 || at == 7 || at == B_PAWN_PAIR_AT)
             continue;
         int row = lut2_row_map[at];
         for (Square from = SQ_A1; from <= SQ_H8; ++from)
@@ -187,7 +180,7 @@ constexpr auto index_lut2 = index_lut2_array();
 // Verify Dimensions matches the value computed by init_threat_offsets.
 static_assert([] {
     auto [h, o] = init_threat_offsets();
-    int  total  = 0;
+    int total   = 0;
     for (int at = 0; at < ATTACK_TYPE_NB; ++at)
     {
         int slots = 0;
@@ -232,9 +225,9 @@ void FullThreats::append_active_indices(Color perspective, const Position& pos, 
             const Piece    attacker = make_piece(c, PAWN);
             const Bitboard cPawns   = pos.pieces(c, PAWN);
 
-            // Diagonal pawn threats, excluding pawn targets (pawn-on-pawn co-presence
-            // is captured by the PAWN_PAIR features below).
-            const Bitboard diagTargets = occupiedNoK & ~pawns;
+            // Diagonal pawn threats, excluding pawn targets. Pawn-on-pawn co-presence
+            // is captured by PP_3Wide.
+            const Bitboard diagTargets  = occupiedNoK & ~pawns;
             auto           process_pawn = [&](Bitboard targets, Direction dir) {
                 AttackType at = make_attack_type(attacker);
                 while (targets)
@@ -257,28 +250,6 @@ void FullThreats::append_active_indices(Color perspective, const Position& pos, 
             {
                 process_pawn(shift<SOUTH_WEST>(cPawns) & diagTargets, SOUTH_WEST);
                 process_pawn(shift<SOUTH_EAST>(cPawns) & diagTargets, SOUTH_EAST);
-            }
-
-            // Pawn-pair features: a static geometric relation between any two pawns
-            // at most one file apart. Both directed entries of every pair are
-            // emitted (across the two color loops / within this loop for same-color
-            // pairs); the semi-exclusion in make_index keeps exactly one of the two
-            // per perspective.
-            {
-                const AttackType pairAT = c == WHITE ? W_PAWN_PAIR_AT : B_PAWN_PAIR_AT;
-                Bitboard         bb     = cPawns;
-                while (bb)
-                {
-                    Square   from    = pop_lsb(bb);
-                    Bitboard targets = pawn_pair_bb(from) & pawns;
-                    while (targets)
-                    {
-                        Square     to    = pop_lsb(targets);
-                        TargetType tt    = make_target_type(pos.piece_on(to));
-                        IndexType  index = make_index(perspective, pairAT, from, to, tt, ksq);
-                        active.push_back_if_lt(index, Dimensions);
-                    }
-                }
             }
         }
 
@@ -325,10 +296,13 @@ void FullThreats::append_changed_indices(Color                   perspective,
         auto&           insert = add ? added : removed;
         const IndexType index  = make_index(perspective, at, from, to, tt, ksq);
 
-        if (prefetchBase)
-            prefetch<PrefetchRw::READ, PrefetchLoc::LOW>(reinterpret_cast<const void*>(
-              reinterpret_cast<uintptr_t>(prefetchBase) + index * prefetchStride));
-        insert.push_back_if_lt(index, Dimensions);
+        if (index < Dimensions)
+        {
+            if (prefetchBase)
+                prefetch<PrefetchRw::READ, PrefetchLoc::LOW>(reinterpret_cast<const void*>(
+                  reinterpret_cast<uintptr_t>(prefetchBase) + index * prefetchStride));
+            insert.push_back(index);
+        }
     }
 }
 

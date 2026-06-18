@@ -32,10 +32,10 @@ namespace Stockfish::Eval::NNUE::Features {
 class FullThreats {
    public:
     // Hash value embedded in the evaluation file
-    static constexpr u32 HashValue = 0x9d6e4f50u;
+    static constexpr u32 HashValue = 0x4b1f6a2du;
 
     // Number of feature dimensions
-    static constexpr IndexType Dimensions = 62784;
+    static constexpr IndexType Dimensions = 59808;
 
     // clang-format off
     // Orient a square according to perspective (rotates by 180 for black)
@@ -54,12 +54,11 @@ class FullThreats {
     // -1 = fully excluded (never a valid feature).
     // >= 0 = contiguous slot index used to compute the feature base offset.
     // The gap AT rows (6,7 and 14,15) and gap TT columns (5-7) are all -1.
-    // PAWN_DIAG no longer targets pawns (pawn-on-pawn co-presence is captured by
-    // the PAWN_PAIR rows), so its W_P/B_P columns are -1.
+    // PAWN_DIAG does not target pawns; pawn-on-pawn co-presence is captured by PP_3Wide.
     static constexpr std::int8_t slot_map[ATTACK_TYPE_NB][TARGET_TYPE_NB] = {
       //                  W_P  W_N  W_B  W_R  W_Q  g5   g6   g7   B_P  B_N  B_B  B_R  B_Q
       /* W_PAWN_DIAG */ { -1,   0,  -1,   1,  -1,  -1,  -1,  -1,  -1,   2,  -1,   3,  -1},
-      /* W_PAWN_PAIR */ {  0,  -1,  -1,  -1,  -1,  -1,  -1,  -1,   1,  -1,  -1,  -1,  -1},
+      /* W_PAWN_PAIR */ { -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1},
       /* W_KNIGHT    */ {  0,   1,   2,   3,   4,  -1,  -1,  -1,   5,   6,   7,   8,   9},
       /* W_BISHOP    */ {  0,   1,   2,   3,  -1,  -1,  -1,  -1,   4,   5,   6,   7,  -1},
       /* W_ROOK      */ {  0,   1,   2,   3,  -1,  -1,  -1,  -1,   4,   5,   6,   7,  -1},
@@ -67,7 +66,7 @@ class FullThreats {
       /* gap_6       */ { -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1},
       /* gap_7       */ { -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1},
       /* B_PAWN_DIAG */ { -1,   0,  -1,   1,  -1,  -1,  -1,  -1,  -1,   2,  -1,   3,  -1},
-      /* B_PAWN_PAIR */ {  0,  -1,  -1,  -1,  -1,  -1,  -1,  -1,   1,  -1,  -1,  -1,  -1},
+      /* B_PAWN_PAIR */ { -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1},
       /* B_KNIGHT    */ {  0,   1,   2,   3,   4,  -1,  -1,  -1,   5,   6,   7,   8,   9},
       /* B_BISHOP    */ {  0,   1,   2,   3,  -1,  -1,  -1,  -1,   4,   5,   6,   7,  -1},
       /* B_ROOK      */ {  0,   1,   2,   3,  -1,  -1,  -1,  -1,   4,   5,   6,   7,  -1},
@@ -80,7 +79,7 @@ class FullThreats {
     static constexpr bool semi_map[ATTACK_TYPE_NB][TARGET_TYPE_NB] = {
       //                  W_P    W_N    W_B    W_R    W_Q    g5     g6     g7     B_P    B_N    B_B    B_R    B_Q
       /* W_PAWN_DIAG */ {false, false, false, false, false, false, false, false, false, false, false, false, false},
-      /* W_PAWN_PAIR */ { true, false, false, false, false, false, false, false,  true, false, false, false, false},
+      /* W_PAWN_PAIR */ {false, false, false, false, false, false, false, false, false, false, false, false, false},
       /* W_KNIGHT    */ {false,  true, false, false, false, false, false, false, false,  true, false, false, false},
       /* W_BISHOP    */ {false, false,  true, false, false, false, false, false, false, false,  true, false, false},
       /* W_ROOK      */ {false, false, false,  true, false, false, false, false, false, false, false,  true, false},
@@ -88,7 +87,7 @@ class FullThreats {
       /* gap_6       */ {false, false, false, false, false, false, false, false, false, false, false, false, false},
       /* gap_7       */ {false, false, false, false, false, false, false, false, false, false, false, false, false},
       /* B_PAWN_DIAG */ {false, false, false, false, false, false, false, false, false, false, false, false, false},
-      /* B_PAWN_PAIR */ { true, false, false, false, false, false, false, false,  true, false, false, false, false},
+      /* B_PAWN_PAIR */ {false, false, false, false, false, false, false, false, false, false, false, false, false},
       /* B_KNIGHT    */ {false,  true, false, false, false, false, false, false, false,  true, false, false, false},
       /* B_BISHOP    */ {false, false,  true, false, false, false, false, false, false, false,  true, false, false},
       /* B_ROOK      */ {false, false, false,  true, false, false, false, false, false, false, false,  true, false},

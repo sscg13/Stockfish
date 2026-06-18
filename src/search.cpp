@@ -637,8 +637,9 @@ void Search::Worker::do_move(
     bool capture = pos.capture_stage(move);
     ++nodes;
 
-    auto [dirtyPiece, dirtyThreats] = accumulatorStack.push();
-    pos.do_move(move, st, givesCheck, dirtyPiece, dirtyThreats, &tt, &sharedHistory);
+    auto [dirtyPiece, dirtyThreats, dirtyPawnPairs] = accumulatorStack.push();
+    pos.do_move(move, st, givesCheck, dirtyPiece, dirtyThreats, dirtyPawnPairs, &tt,
+                &sharedHistory);
 
     if (ss != nullptr)
     {

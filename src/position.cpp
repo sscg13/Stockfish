@@ -834,6 +834,7 @@ void Position::do_move(Move                      m,
                        bool                      givesCheck,
                        DirtyPiece&               dp,
                        DirtyThreats&             dts,
+                       DirtyPawnPairs&           dpps,
                        const TranspositionTable* tt      = nullptr,
                        const SharedHistories*    history = nullptr) {
 
@@ -877,7 +878,7 @@ void Position::do_move(Move                      m,
         assert(captured == make_piece(us, ROOK));
 
         Square rfrom, rto;
-        do_castling<true>(us, from, to, rfrom, rto, &dts, &dp);
+        do_castling<true>(us, from, to, rfrom, rto, &dts, &dpps, &dp);
 
         k ^= Zobrist::psq[captured][rfrom] ^ Zobrist::psq[captured][rto];
         st->nonPawnKey[us] ^= Zobrist::psq[captured][rfrom] ^ Zobrist::psq[captured][rto];
@@ -902,7 +903,7 @@ void Position::do_move(Move                      m,
                 assert(piece_on(capsq) == make_piece(them, PAWN));
 
                 // Update board and piece lists in ep case, normal captures are updated later
-                remove_piece(capsq, &dts);
+                remove_piece(capsq, &dts, &dpps);
             }
 
             st->pawnKey ^= Zobrist::psq[captured][capsq];
@@ -1036,15 +1037,15 @@ void Position::do_move(Move                      m,
 
         if (captured && m.type_of() != EN_PASSANT)
         {
-            remove_piece(from, &dts);
-            swap_piece(to, toPc, &dts);
+            remove_piece(from, &dts, &dpps);
+            swap_piece(to, toPc, &dts, &dpps);
         }
         else if (pc == toPc)
-            move_piece(from, to, &dts);
+            move_piece(from, to, &dts, &dpps);
         else
         {
-            remove_piece(from, &dts);
-            put_piece(toPc, to, &dts);
+            remove_piece(from, &dts, &dpps);
+            put_piece(toPc, to, &dts, &dpps);
         }
     }
 
@@ -1154,7 +1155,18 @@ inline void add_dirty_threat(DirtyThreats* const dts,
                              TargetType          tt,
                              Square              s,
                              Square              threatenedSq) {
-    dts->list.push_back({at, tt, s, threatenedSq, putPiece});
+    if (dts)
+        dts->list.push_back({at, tt, s, threatenedSq, putPiece});
+}
+
+inline void add_dirty_pawn_pair(DirtyPawnPairs* const dpps,
+                                bool                  putPiece,
+                                Color                 color,
+                                Color                 pairedColor,
+                                Square                s,
+                                Square                pairedSq) {
+    if (dpps)
+        dpps->list.push_back({color, pairedColor, s, pairedSq, putPiece});
 }
 
 #ifdef USE_AVX512ICL
@@ -1188,7 +1200,7 @@ void write_multiple_dirties(const Position& p,
     {
         // AT = piece - ((piece & 7) == 1)
         // XOR-spacing-8 layout: W=0-5, B=8-13. Pawns map to the diagonal AttackType.
-        __mmask16 pawn_mask  = _mm512_cmpeq_epi32_mask(
+        __mmask16 pawn_mask = _mm512_cmpeq_epi32_mask(
           _mm512_and_epi32(threat_pieces, _mm512_set1_epi32(7)), _mm512_set1_epi32(1));
         __m512i is_pawn = _mm512_mask_set1_epi32(_mm512_setzero_si512(), pawn_mask, 1);
         threat_pieces   = _mm512_sub_epi32(threat_pieces, is_pawn);
@@ -1197,9 +1209,9 @@ void write_multiple_dirties(const Position& p,
     {
         // TT = (piece & 7) - 1 + (piece & 8)
         // XOR-spacing-8 layout: W=0-4, B=8-12.
-        __m512i pt = _mm512_sub_epi32(_mm512_and_epi32(threat_pieces, _mm512_set1_epi32(7)),
-                                      _mm512_set1_epi32(1));
-        __m512i co = _mm512_and_epi32(threat_pieces, _mm512_set1_epi32(8));
+        __m512i pt    = _mm512_sub_epi32(_mm512_and_epi32(threat_pieces, _mm512_set1_epi32(7)),
+                                         _mm512_set1_epi32(1));
+        __m512i co    = _mm512_and_epi32(threat_pieces, _mm512_set1_epi32(8));
         threat_pieces = _mm512_add_epi32(pt, co);
     }
 
@@ -1214,10 +1226,11 @@ void write_multiple_dirties(const Position& p,
 #endif
 
 template<bool ComputeRay>
-void Position::update_piece_threats(Piece               pc,
-                                    bool                putPiece,
-                                    Square              s,
-                                    DirtyThreats* const dts,
+void Position::update_piece_threats(Piece                 pc,
+                                    bool                  putPiece,
+                                    Square                s,
+                                    DirtyThreats* const   dts,
+                                    DirtyPawnPairs* const dpps,
                                     // Silence spurious warning on GCC 10
                                     [[maybe_unused]] Bitboard noRaysContaining) const {
     const Bitboard occupied     = pieces();
@@ -1244,12 +1257,12 @@ void Position::update_piece_threats(Piece               pc,
                 const Square threatenedSq = lsb(discovered);
                 const Piece  threatenedPc = piece_on(threatenedSq);
                 add_dirty_threat(dts, !putPiece, make_attack_type(slider),
-                                 make_target_type(threatenedPc), sliderSq, threatenedSq);
+                                     make_target_type(threatenedPc), sliderSq, threatenedSq);
             }
 
             if (addDirectAttacks)
                 add_dirty_threat(dts, putPiece, make_attack_type(slider), make_target_type(pc),
-                                 sliderSq, s);
+                                     sliderSq, s);
         }
     };
 
@@ -1266,7 +1279,7 @@ void Position::update_piece_threats(Piece               pc,
     const Bitboard blackPawns = pieces(BLACK, PAWN);
 
 
-    Bitboard threatened = attacks_bb(pc, s, occupied) & occupiedNoK;
+    Bitboard threatened       = attacks_bb(pc, s, occupied) & occupiedNoK;
     Bitboard incoming_threats = (PseudoAttacks[KNIGHT][s] & knights);
 
     // Diagonal pawn threats no longer target pawns (pawn-on-pawn co-presence is
@@ -1281,22 +1294,16 @@ void Position::update_piece_threats(Piece               pc,
         threatened &= ~pieces(PAWN);
 
         // Pawn-pair features: static geometric relation between pc and every pawn
-        // at most one file apart. Always emit both directed entries of each pair;
-        // the semi-exclusion in make_index keeps exactly one per perspective.
-        // Scalar on all build paths: write_multiple_dirties' piece->type conversion
-        // would derive the DIAG AttackType from a pawn, which is wrong for pairs.
+        // at most one file apart. The index is unordered, so each partner emits
+        // one dirty entry.
         {
-            const AttackType pairAT   = c == WHITE ? W_PAWN_PAIR_AT : B_PAWN_PAIR_AT;
-            Bitboard         partners = pawn_pair_bb(s) & pieces(PAWN);
+            Bitboard partners = pawn_pair_bb(s) & pieces(PAWN);
             while (partners)
             {
                 Square t       = pop_lsb(partners);
                 Piece  partner = piece_on(t);
 
-                add_dirty_threat(dts, putPiece, pairAT, make_target_type(partner), s, t);
-                add_dirty_threat(dts, putPiece,
-                                 color_of(partner) == WHITE ? W_PAWN_PAIR_AT : B_PAWN_PAIR_AT,
-                                 make_target_type(pc), t, s);
+                add_dirty_pawn_pair(dpps, putPiece, c, color_of(partner), s, t);
             }
         }
     }
@@ -1307,22 +1314,21 @@ void Position::update_piece_threats(Piece               pc,
     }
 
 #ifdef USE_AVX512ICL
+    if (dts)
     {
         // Outgoing: AT is constant (diagonal for pawns), TT varies per target piece.
         AttackType  at_pc       = make_attack_type(pc);
         DirtyThreat dt_template = {at_pc, TargetType(0), s, Square(0), putPiece};
         write_multiple_dirties<DirtyThreat::ThreatenedSqOffset, DirtyThreat::TargetTypeOffset,
                                false>(*this, threatened, dt_template, dts);
-    }
 
-    Bitboard all_attackers = sliders | incoming_threats;
+        Bitboard all_attackers = sliders | incoming_threats;
 
-    {
         // Incoming: TT is constant (target is pc), AT varies per attacker piece.
         TargetType  tt_pc       = make_target_type(pc);
         DirtyThreat dt_template = {AttackType(0), tt_pc, Square(0), s, putPiece};
-        write_multiple_dirties<DirtyThreat::PcSqOffset, DirtyThreat::AttackTypeOffset,
-                               true>(*this, all_attackers, dt_template, dts);
+        write_multiple_dirties<DirtyThreat::PcSqOffset, DirtyThreat::AttackTypeOffset, true>(
+          *this, all_attackers, dt_template, dts);
     }
 #else
     while (threatened)
@@ -1333,8 +1339,8 @@ void Position::update_piece_threats(Piece               pc,
         assert(threatenedSq != s);
         assert(threatenedPc);
 
-        add_dirty_threat(dts, putPiece, make_attack_type(pc), make_target_type(threatenedPc),
-                         s, threatenedSq);
+        add_dirty_threat(dts, putPiece, make_attack_type(pc), make_target_type(threatenedPc), s,
+                         threatenedSq);
     }
 #endif
 
@@ -1368,13 +1374,14 @@ void Position::update_piece_threats(Piece               pc,
 // Helper used to do/undo a castling move. This is a bit
 // tricky in Chess960 where from/to squares can overlap.
 template<bool Do>
-void Position::do_castling(Color               us,
-                           Square              from,
-                           Square&             to,
-                           Square&             rfrom,
-                           Square&             rto,
-                           DirtyThreats* const dts,
-                           DirtyPiece* const   dp) {
+void Position::do_castling(Color                 us,
+                           Square                from,
+                           Square&               to,
+                           Square&               rfrom,
+                           Square&               rto,
+                           DirtyThreats* const   dts,
+                           DirtyPawnPairs* const dpps,
+                           DirtyPiece* const     dp) {
 
     bool kingSide = to > from;
     rfrom         = to;  // Castling is encoded as "king captures friendly rook"
@@ -1392,10 +1399,10 @@ void Position::do_castling(Color               us,
     }
 
     // Remove both pieces first since squares could overlap in Chess960
-    remove_piece(Do ? from : to, dts);
-    remove_piece(Do ? rfrom : rto, dts);
-    put_piece(make_piece(us, KING), Do ? to : from, dts);
-    put_piece(make_piece(us, ROOK), Do ? rto : rfrom, dts);
+    remove_piece(Do ? from : to, dts, dpps);
+    remove_piece(Do ? rfrom : rto, dts, dpps);
+    put_piece(make_piece(us, KING), Do ? to : from, dts, dpps);
+    put_piece(make_piece(us, ROOK), Do ? rto : rfrom, dts, dpps);
 }
 
 
