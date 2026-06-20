@@ -16,8 +16,6 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-// Definition of pawn-pair input features for the NNUE evaluation function
-
 #ifndef NNUE_FEATURES_PP_3WIDE_INCLUDED
 #define NNUE_FEATURES_PP_3WIDE_INCLUDED
 
@@ -33,24 +31,20 @@ namespace Stockfish::Eval::NNUE::Features {
 
 class PP_3Wide {
    public:
-    // Hash value embedded in the evaluation file
     static constexpr u32 HashValue = 0x86f2b1ddu;
 
     static constexpr IndexType PawnIds    = COLOR_NB * 48;
     static constexpr IndexType Dimensions = PawnIds * (PawnIds - 1) / 2;
 
-    // Maximum number of simultaneously active features.
     static constexpr IndexType MaxActiveDimensions = 128;
-    using IndexList                                = ValueList<IndexType, MaxActiveDimensions>;
+    using IndexList                                = ValueList<u16, MaxActiveDimensions + 16>;
     using DiffType                                 = DirtyPawnPairs;
 
     static IndexType make_index(
       Color perspective, Color color, Square from, Square to, Color pairedColor, Square ksq);
 
-    // Get a list of indices for active features
     static void append_active_indices(Color perspective, const Position& pos, IndexList& active);
 
-    // Get a list of indices for recently changed features
     static void append_changed_indices(Color                   perspective,
                                        Square                  ksq,
                                        const DiffType&         diff,

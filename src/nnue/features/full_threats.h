@@ -50,11 +50,6 @@ class FullThreats {
         SQ_A1, SQ_A1, SQ_A1, SQ_A1, SQ_H1, SQ_H1, SQ_H1, SQ_H1,
     };
 
-    // Slot index for each (AttackType, TargetType) pair.
-    // -1 = fully excluded (never a valid feature).
-    // >= 0 = contiguous slot index used to compute the feature base offset.
-    // The gap AT rows (6,7 and 14,15) and gap TT columns (5-7) are all -1.
-    // PAWN_DIAG does not target pawns; pawn-on-pawn co-presence is captured by PP_3Wide.
     static constexpr std::int8_t slot_map[ATTACK_TYPE_NB][TARGET_TYPE_NB] = {
       //                  W_P  W_N  W_B  W_R  W_Q  g5   g6   g7   B_P  B_N  B_B  B_R  B_Q
       /* W_PAWN_DIAG */ { -1,   0,  -1,   1,  -1,  -1,  -1,  -1,  -1,   2,  -1,   3,  -1},
@@ -73,9 +68,6 @@ class FullThreats {
       /* B_QUEEN     */ {  0,   1,   2,   3,   4,  -1,  -1,  -1,   5,   6,   7,   8,   9},
     };
 
-    // Semi-exclusion: true = only active when from_oriented >= to_oriented.
-    // Encodes symmetric pairs (mutual attacks / same-type defences) so each
-    // pair is represented by exactly one feature index.
     static constexpr bool semi_map[ATTACK_TYPE_NB][TARGET_TYPE_NB] = {
       //                  W_P    W_N    W_B    W_R    W_Q    g5     g6     g7     B_P    B_N    B_B    B_R    B_Q
       /* W_PAWN_DIAG */ {false, false, false, false, false, false, false, false, false, false, false, false, false},
@@ -97,7 +89,7 @@ class FullThreats {
 
     // Maximum number of simultaneously active features.
     static constexpr IndexType MaxActiveDimensions = 224;
-    using IndexList                                = ValueList<IndexType, MaxActiveDimensions>;
+    using IndexList                                = ValueList<u16, MaxActiveDimensions>;
     using DiffType                                 = DirtyThreats;
 
     static IndexType
