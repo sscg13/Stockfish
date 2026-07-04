@@ -39,6 +39,7 @@
     #include <cassert>
     #include <cstddef>
     #include <cstdint>
+    #include <type_traits>
     #include "misc.h"
 
     #if defined(_MSC_VER)
@@ -57,15 +58,15 @@
 // _WIN32                  Building on Windows (any)
 // _WIN64                  Building on Windows 64 bit
 
-    // Enforce minimum GCC version
+// Enforce minimum GCC version
     #if defined(__GNUC__) && !defined(__clang__) \
       && (__GNUC__ < 9 || (__GNUC__ == 9 && __GNUC_MINOR__ < 3))
         #error "Stockfish requires GCC 9.3 or later for correct compilation"
     #endif
 
     // Enforce minimum Clang version
-    #if defined(__clang__) && (__clang_major__ < 11)
-        #error "Stockfish requires Clang 11.0 or later for correct compilation"
+    #if defined(__clang__) && (__clang_major__ < 10)
+        #error "Stockfish requires Clang 10.0 or later for correct compilation"
     #endif
 
     #define ASSERT_ALIGNED(ptr, alignment) assert(reinterpret_cast<uintptr_t>(ptr) % alignment == 0)
@@ -75,7 +76,7 @@
         #define IS_64BIT
     #endif
 
-    #if defined(_MSC_VER)
+    #if defined(USE_POPCNT) && defined(_MSC_VER)
         #include <nmmintrin.h>  // Microsoft header for _mm_popcnt_u64()
     #endif
 
@@ -189,10 +190,6 @@ constexpr bool is_mated(Value value) {
 
 constexpr bool is_mate_or_mated(Value value) { return is_mate(value) || is_mated(value); }
 
-constexpr Value mate_in(int ply) { return VALUE_MATE - ply; }
-
-constexpr Value mated_in(int ply) { return -VALUE_MATE + ply; }
-
 // In the code, we make the assumption that these values
 // are such that non_pawn_material() can be used to uniquely
 // identify the material on the board.
@@ -305,56 +302,6 @@ struct DirtyPiece {
     Piece  remove_pc, add_pc;
 };
 
-// Keep track of what threats change on the board (used by NNUE)
-struct DirtyThreat {
-    static constexpr int PcSqOffset         = 0;
-    static constexpr int ThreatenedSqOffset = 8;
-    static constexpr int ThreatenedPcOffset = 16;
-    static constexpr int PcOffset           = 20;
-
-    DirtyThreat() { /* don't initialize data */ }
-    DirtyThreat(u32 raw) :
-        data(raw) {}
-    DirtyThreat(Piece pc, Piece threatened_pc, Square pc_sq, Square threatened_sq, bool add) {
-        data = (u32(add) << 31) | (pc << PcOffset) | (threatened_pc << ThreatenedPcOffset)
-             | (threatened_sq << ThreatenedSqOffset) | (pc_sq << PcSqOffset);
-    }
-
-    Piece  pc() const { return static_cast<Piece>(data >> PcOffset & 0xf); }
-    Piece  threatened_pc() const { return static_cast<Piece>(data >> ThreatenedPcOffset & 0xf); }
-    Square threatened_sq() const { return static_cast<Square>(data >> ThreatenedSqOffset & 0xff); }
-    Square pc_sq() const { return static_cast<Square>(data >> PcSqOffset & 0xff); }
-    bool   add() const { return data >> 31; }
-    u32    raw() const { return data; }
-
-   private:
-    u32 data;
-};
-
-// A piece can be involved in at most 8 outgoing attacks and 16 incoming attacks.
-// Moving a piece also can reveal at most 8 discovered attacks.
-// This implies that a non-castling move can change at most (8 + 16) * 3 + 8 = 80 features.
-// By similar logic, a castling move can change at most (5 + 1 + 3 + 9) * 2 = 36 features.
-// Thus, 80 should work as an upper bound. Finally, 16 entries are added to accommodate
-// unmasked vector stores near the end of the list.
-
-using DirtyThreatList = ValueList<DirtyThreat, 96>;
-
-struct DirtyThreats {
-    DirtyThreatList list;
-};
-
-struct DirtyPawnPairs {
-    Bitboard before[COLOR_NB];
-    Bitboard after[COLOR_NB];
-};
-
-struct Dirties {
-    DirtyPiece     dirtyPiece;
-    DirtyThreats   dirtyThreats;
-    DirtyPawnPairs dirtyPawnPairs;
-};
-
     #define ENABLE_INCR_OPERATORS_ON(T) \
         constexpr T& operator++(T& d) { return d = T(int(d) + 1); } \
         constexpr T& operator--(T& d) { return d = T(int(d) - 1); }
@@ -390,6 +337,10 @@ constexpr Piece operator~(Piece pc) { return Piece(pc ^ 8); }
 constexpr CastlingRights operator&(Color c, CastlingRights cr) {
     return CastlingRights((c == WHITE ? WHITE_CASTLING : BLACK_CASTLING) & cr);
 }
+
+constexpr Value mate_in(int ply) { return VALUE_MATE - ply; }
+
+constexpr Value mated_in(int ply) { return -VALUE_MATE + ply; }
 
 constexpr Square make_square(File f, Rank r) { return Square((r << 3) + f); }
 
@@ -464,6 +415,10 @@ class Move {
         return Square(data & 0x3F);
     }
 
+    // Same as to_sq() but without assertion, for branchless code paths
+    // where the result is masked/ignored when move is not ok
+    constexpr Square to_sq_unchecked() const { return Square(data & 0x3F); }
+
     constexpr MoveType type_of() const { return MoveType(data & (3 << 14)); }
 
     constexpr PieceType promotion_type() const { return PieceType(((data >> 12) & 3) + KNIGHT); }
@@ -490,6 +445,14 @@ class Move {
    protected:
     u16 data;
 };
+
+template<typename T, typename... Ts>
+struct is_all_same {
+    static constexpr bool value = (std::is_same_v<T, Ts> && ...);
+};
+
+template<typename... Ts>
+constexpr auto is_all_same_v = is_all_same<Ts...>::value;
 
 }  // namespace Stockfish
 
