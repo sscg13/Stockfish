@@ -149,6 +149,7 @@ class Position {
                  bool                      givesCheck,
                  DirtyPiece&               dp,
                  DirtyThreats&             dts,
+                 DirtyPawnPairs&           dpps,
                  const TranspositionTable* tt,
                  const SharedHistories*    worker);
     void undo_move(Move m);
@@ -220,16 +221,17 @@ class Position {
     std::array<Bitboard, PIECE_TYPE_NB> byTypeBB;
     std::array<Bitboard, COLOR_NB>      byColorBB;
 
-    int          pieceCount[PIECE_NB];
-    int          castlingRightsMask[SQUARE_NB];
-    Square       castlingRookSquare[CASTLING_RIGHT_NB];
-    Bitboard     castlingPath[CASTLING_RIGHT_NB];
-    StateInfo*   st;
-    int          gamePly;
-    Color        sideToMove;
-    bool         chess960;
-    DirtyPiece   scratch_dp;
-    DirtyThreats scratch_dts;
+    int            pieceCount[PIECE_NB];
+    int            castlingRightsMask[SQUARE_NB];
+    Square         castlingRookSquare[CASTLING_RIGHT_NB];
+    Bitboard       castlingPath[CASTLING_RIGHT_NB];
+    StateInfo*     st;
+    int            gamePly;
+    Color          sideToMove;
+    bool           chess960;
+    DirtyPiece     scratch_dp;
+    DirtyThreats   scratch_dts;
+    DirtyPawnPairs scratch_dpps;
 };
 
 std::ostream& operator<<(std::ostream& os, const Position& pos);
@@ -417,7 +419,8 @@ inline void Position::swap_piece(Square s, Piece pc, DirtyThreats* const dts) {
 
 inline void Position::do_move(Move m, StateInfo& newSt, const TranspositionTable* tt = nullptr) {
     new (&scratch_dts) DirtyThreats;
-    do_move(m, newSt, gives_check(m), scratch_dp, scratch_dts, tt, nullptr);
+    new (&scratch_dpps) DirtyPawnPairs;
+    do_move(m, newSt, gives_check(m), scratch_dp, scratch_dts, scratch_dpps, tt, nullptr);
 }
 
 inline StateInfo* Position::state() const { return st; }

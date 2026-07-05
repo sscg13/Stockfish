@@ -341,6 +341,11 @@ struct DirtyThreats {
     DirtyThreatList list;
 };
 
+struct DirtyPawnPairs {
+    Bitboard before[COLOR_NB];
+    Bitboard after[COLOR_NB];
+};
+
     #define ENABLE_INCR_OPERATORS_ON(T) \
         constexpr T& operator++(T& d) { return d = T(int(d) + 1); } \
         constexpr T& operator--(T& d) { return d = T(int(d) - 1); }
