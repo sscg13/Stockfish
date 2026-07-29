@@ -149,10 +149,16 @@ NetworkOutput Network::evaluate(const Position&    pos,
 
     NNZInfo<L1> nnzInfo;
 
-    const int  bucket     = (pos.count<ALL_PIECES>() - 1) / 4;
+    const int bucket = (pos.count<ALL_PIECES>() - 1) / 4;
     featureTransformer.transform(pos, accumulatorStack, cache, transformedFeatures, bucket, nnzInfo);
     const auto positional = network[bucket].propagate(transformedFeatures, nnzInfo);
-    return {VALUE_ZERO, static_cast<Value>(positional / OutputScale)};
+    const auto nnue       = static_cast<Value>(positional / OutputScale);
+
+    // NNUE no longer has a separate PSQT output. Split the single score across
+    // the legacy output pair so callers preserve the score while complexity
+    // remains near zero rather than being proportional to the full evaluation.
+    const auto first = nnue / 2;
+    return {first, nnue - first};
 }
 
 
