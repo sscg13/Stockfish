@@ -132,7 +132,7 @@ class FeatureTransformer {
     static constexpr u32 get_hash_value() {
         return combine_hash(
                  {ThreatFeatureSet::HashValue, PairFeatureSet::HashValue, PSQFeatureSet::HashValue})
-             ^ (OutputDimensions * 2);
+             ^ (OutputDimensions * 2) ^ 0xF2E0D51Bu;
     }
 
     void permute_weights() {
@@ -171,13 +171,10 @@ class FeatureTransformer {
 
         read_little_endian<ThreatWeightType>(stream, threatWeights(),
                                              ThreatInputDimensions * HalfDimensions);
-        read_leb_128(stream, threatPsqtWeights(), ThreatFeatureSet::Dimensions * PSQTBuckets);
         read_little_endian<ThreatWeightType>(stream, ppWeights(),
                                              PairInputDimensions * HalfDimensions);
-        read_leb_128(stream, ppPsqtWeights(), PairFeatureSet::Dimensions * PSQTBuckets);
 
         read_leb_128(stream, weights);
-        read_leb_128(stream, psqtWeights);
 
         permute_weights();
 
@@ -195,15 +192,10 @@ class FeatureTransformer {
 
         write_little_endian<ThreatWeightType>(stream, copy->threatWeights(),
                                               ThreatInputDimensions * HalfDimensions);
-        write_leb_128<PSQTWeightType>(stream, copy->threatPsqtWeights(),
-                                      ThreatFeatureSet::Dimensions * PSQTBuckets);
         write_little_endian<ThreatWeightType>(stream, copy->ppWeights(),
                                               PairInputDimensions * HalfDimensions);
-        write_leb_128<PSQTWeightType>(stream, copy->ppPsqtWeights(),
-                                      PairFeatureSet::Dimensions * PSQTBuckets);
 
         write_leb_128<WeightType>(stream, copy->weights);
-        write_leb_128<PSQTWeightType>(stream, copy->psqtWeights);
 
         return !stream.fail();
     }
@@ -213,10 +205,8 @@ class FeatureTransformer {
 
         hash_combine(h, get_raw_data_hash(biases));
         hash_combine(h, get_raw_data_hash(weights));
-        hash_combine(h, get_raw_data_hash(psqtWeights));
 
         hash_combine(h, get_raw_data_hash(threatAndPpWeights));
-        hash_combine(h, get_raw_data_hash(threatAndPpPsqtWeights));
 
         hash_combine(h, get_hash_value());
 
@@ -444,11 +434,11 @@ class FeatureTransformer {
                                       (ThreatFeatureSet::Dimensions + PairFeatureSet::Dimensions)
                                         * HalfDimensions> threatAndPpWeights;
     alignas(CacheLineSize)
-      std::array<PSQTWeightType, PSQTBuckets * PSQFeatureSet::Dimensions> psqtWeights;
+      std::array<PSQTWeightType, PSQTBuckets * PSQFeatureSet::Dimensions> psqtWeights{};
     // As above
     alignas(CacheLineSize) std::array<PSQTWeightType,
                                       (ThreatFeatureSet::Dimensions + PairFeatureSet::Dimensions)
-                                        * PSQTBuckets> threatAndPpPsqtWeights;
+                                        * PSQTBuckets> threatAndPpPsqtWeights{};
 };
 
 }  // namespace Stockfish::Eval::NNUE
