@@ -18,6 +18,7 @@
 #include <iosfwd>
 
 #include "../nnue_common.h"
+#include "../simd.h"
 
 namespace Stockfish::Eval::NNUE::Layers {
 
@@ -49,6 +50,31 @@ class Quantmoid4 {
         hash_combine(h, get_hash_value(0));
         return h;
     }
+
+#if defined(USE_PAIR_ACTIVATIONS)
+    void propagate_pair(const InputType* input, OutputType* squared, OutputType* quantmoid) const {
+        for (IndexType i = 0; i < InputDimensions; ++i)
+        {
+            IndexType outputIndex = i;
+#if defined(USE_AVX2_PAIR_ACTIVATIONS)
+            const IndexType block = i / 32;
+            const IndexType chunk = (i % 32) / 4;
+            outputIndex = block * 32 + ((chunk % 2) * 4 + chunk / 2) * 4 + i % 4;
+#endif
+
+            squared[outputIndex] = static_cast<OutputType>(
+              std::min(127ll,
+                       (static_cast<long long>(input[i]) * input[i])
+                         >> (2 * WeightScaleBitsLocal + 7)));
+
+            const int quantizedInput = std::clamp(input[i] >> WeightScaleBitsLocal, -127, 127);
+            const int distance       = 127 - std::abs(quantizedInput);
+            const int lowerHalf      = (distance * distance) >> 8;
+            quantmoid[outputIndex] =
+              static_cast<OutputType>(quantizedInput < 0 ? lowerHalf : 126 - lowerHalf);
+        }
+    }
+#endif
 
     void propagate(const InputType* input, OutputType* output) const {
         for (IndexType i = 0; i < InputDimensions; ++i)
