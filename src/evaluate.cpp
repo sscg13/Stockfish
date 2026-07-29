@@ -37,6 +37,15 @@
 
 namespace Stockfish {
 
+// Returns a static, purely materialistic evaluation of the position from
+// the point of view of the side to move. It can be divided by PawnValue to get
+// an approximation of the material advantage on the board in terms of pawns.
+int Eval::simple_eval(const Position& pos) {
+    const Color c = pos.side_to_move();
+    return PawnValue * (pos.count<PAWN>(c) - pos.count<PAWN>(~c)) + pos.non_pawn_material(c)
+         - pos.non_pawn_material(~c);
+}
+
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
 // of the position from the point of view of the side to move.
 Value Eval::evaluate(const Eval::NNUE::Network&     network,
@@ -47,12 +56,10 @@ Value Eval::evaluate(const Eval::NNUE::Network&     network,
 
     assert(!pos.checkers());
 
-    auto [psqt, positional] = network.evaluate(pos, accumulators, caches);
-
-    Value nnue = psqt + positional;
+    Value nnue = network.evaluate(pos, accumulators, caches);
 
     // Blend optimism and eval with nnue complexity
-    int nnueComplexity = std::abs(psqt - positional);
+    int nnueComplexity = std::abs(2 * nnue - simple_eval(pos));
     optimism += optimism * i64(nnueComplexity) / 476;
     nnue -= nnue * i64(nnueComplexity) / 18236;
 
@@ -86,11 +93,13 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Network& network) {
 
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
-    auto [psqt, positional] = network.evaluate(pos, *accumulators, *caches);
-    Value v                 = psqt + positional;
+    Value v = network.evaluate(pos, *accumulators, *caches);
     ss << "NNUE evaluation          " << v << " (side to move, internal units)\n";
     v = pos.side_to_move() == WHITE ? v : -v;
     ss << "NNUE evaluation        " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)\n";
+
+    ss << "SimpleEval                         " << simple_eval(pos)
+       << " (side to move, internal units)\n\n";
 
     v = evaluate(network, pos, *accumulators, *caches, VALUE_ZERO);
     v = pos.side_to_move() == WHITE ? v : -v;
