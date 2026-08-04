@@ -233,15 +233,17 @@ class FeatureTransformer {
 
         using namespace SIMD;
         accumulatorStack.evaluate(pos, *this, cache);
-        const auto& accumulatorState = accumulatorStack.latest();
+        const auto& threatAccumulator = accumulatorStack.latest();
 
-        const Color perspectives[2]  = {pos.side_to_move(), ~pos.side_to_move()};
-        const auto& psqtAccumulation = accumulatorState.psqtAccumulation;
-        const auto  psqt =
-          (psqtAccumulation[perspectives[0]][bucket] - psqtAccumulation[perspectives[1]][bucket])
-          / 2;
+        const Color perspectives[2] = {pos.side_to_move(), ~pos.side_to_move()};
 
-        const auto& accumulation = accumulatorState.accumulation;
+        const auto& stmPsqEntry  = cache[pos.square<KING>(perspectives[0])][perspectives[0]];
+        const auto& nstmPsqEntry = cache[pos.square<KING>(perspectives[1])][perspectives[1]];
+        const auto  psqt         = (stmPsqEntry.psqtAccumulation[bucket]
+                           + threatAccumulator.psqtAccumulation[perspectives[0]][bucket]
+                           - nstmPsqEntry.psqtAccumulation[bucket]
+                           - threatAccumulator.psqtAccumulation[perspectives[1]][bucket])
+                        / 2;
 
         for (IndexType p = 0; p < 2; ++p)
         {
@@ -259,9 +261,14 @@ class FeatureTransformer {
             [[maybe_unused]] const vec_t   FtMax = vec_set_16(FtMaxVal);
             [[maybe_unused]] constexpr int shift = 7;
 
-            const vec_t* in0 = reinterpret_cast<const vec_t*>(&(accumulation[perspectives[p]][0]));
-            const vec_t* in1 =
-              reinterpret_cast<const vec_t*>(&(accumulation[perspectives[p]][HalfDimensions / 2]));
+            const auto& psqAccumulation =
+              cache[pos.square<KING>(perspectives[p])][perspectives[p]].accumulation;
+            const auto&  threatAccumulation = threatAccumulator.accumulation[perspectives[p]];
+            const vec_t* in0                = reinterpret_cast<const vec_t*>(&psqAccumulation[0]);
+            const vec_t* in1 = reinterpret_cast<const vec_t*>(&psqAccumulation[HalfDimensions / 2]);
+            const vec_t* threatIn0 = reinterpret_cast<const vec_t*>(&threatAccumulation[0]);
+            const vec_t* threatIn1 =
+              reinterpret_cast<const vec_t*>(&threatAccumulation[HalfDimensions / 2]);
             vec_t* out = reinterpret_cast<vec_t*>(output + offset);
 
             // Per the NNUE architecture, here we want to multiply pairs of
@@ -318,10 +325,10 @@ class FeatureTransformer {
                 {
                     const IndexType i = (j + k) * 2;
 
-                    vec_t acc0a = in0[i + 0];
-                    vec_t acc0b = in0[i + 1];
-                    vec_t acc1a = in1[i + 0];
-                    vec_t acc1b = in1[i + 1];
+                    vec_t acc0a = vec_add_16(in0[i + 0], threatIn0[i + 0]);
+                    vec_t acc0b = vec_add_16(in0[i + 1], threatIn0[i + 1]);
+                    vec_t acc1a = vec_add_16(in1[i + 0], threatIn1[i + 0]);
+                    vec_t acc1b = vec_add_16(in1[i + 1], threatIn1[i + 1]);
 
                     static_assert(FtMaxVal == 255);
 
@@ -380,14 +387,20 @@ class FeatureTransformer {
                 vid8 = __riscv_vid_v_u8m1(VL);
             else
                 vid16 = __riscv_vid_v_u16m2(VL);
-            const auto& accp = accumulation[perspectives[p]];
+            const auto& psqAccumulation =
+              cache[pos.square<KING>(perspectives[p])][perspectives[p]].accumulation;
+            const auto& threatAccumulation = threatAccumulator.accumulation[perspectives[p]];
 
             for (usize vl; j < HalfDimensions / 2; j += vl)
             {
                 vl = __riscv_vsetvl_e16m2(HalfDimensions / 2 - j);
 
-                vint16m2_t acc0 = __riscv_vle16_v_i16m2(&accp[j], vl);
-                vint16m2_t acc1 = __riscv_vle16_v_i16m2(&accp[j + HalfDimensions / 2], vl);
+                vint16m2_t acc0 =
+                  __riscv_vadd(__riscv_vle16_v_i16m2(&psqAccumulation[j], vl),
+                               __riscv_vle16_v_i16m2(&threatAccumulation[j], vl), vl);
+                vint16m2_t acc1 = __riscv_vadd(
+                  __riscv_vle16_v_i16m2(&psqAccumulation[j + HalfDimensions / 2], vl),
+                  __riscv_vle16_v_i16m2(&threatAccumulation[j + HalfDimensions / 2], vl), vl);
 
                 acc0 = __riscv_vmax(acc0, 0, vl);
                 acc1 = __riscv_vmax(acc1, 0, vl);
@@ -414,11 +427,14 @@ class FeatureTransformer {
 
 #else
 
+            const auto& psqAccumulation =
+              cache[pos.square<KING>(perspectives[p])][perspectives[p]].accumulation;
+            const auto& threatAccumulation = threatAccumulator.accumulation[perspectives[p]];
             for (IndexType j = 0; j < HalfDimensions / 2; ++j)
             {
-                BiasType sum0 = accumulation[static_cast<int>(perspectives[p])][j + 0];
-                BiasType sum1 =
-                  accumulation[static_cast<int>(perspectives[p])][j + HalfDimensions / 2];
+                BiasType sum0 = psqAccumulation[j] + threatAccumulation[j];
+                BiasType sum1 = psqAccumulation[j + HalfDimensions / 2]
+                              + threatAccumulation[j + HalfDimensions / 2];
 
                 sum0 = std::clamp<BiasType>(sum0, 0, FtMaxVal);
                 sum1 = std::clamp<BiasType>(sum1, 0, FtMaxVal);

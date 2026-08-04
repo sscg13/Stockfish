@@ -40,8 +40,8 @@ struct alignas(CacheLineSize) Accumulator;
 
 class FeatureTransformer;
 
-// Class that holds the result of affine transformation of input features,
-// combined HalfKA + Threats
+// Class that holds the result of affine transformation of the threat and
+// pawn-pair input features. HalfKA accumulations live only in AccumulatorCaches.
 struct alignas(CacheLineSize) Accumulator {
     std::array<std::array<i16, L1>, COLOR_NB>          accumulation;
     std::array<std::array<i32, PSQTBuckets>, COLOR_NB> psqtAccumulation;
@@ -49,10 +49,10 @@ struct alignas(CacheLineSize) Accumulator {
 };
 
 
-// AccumulatorCaches struct provides per-thread accumulator caches, where each
-// cache contains multiple entries for each of the possible king squares.
-// When the accumulator needs to be refreshed, the cached entry is used to more
-// efficiently update the accumulator, instead of rebuilding it from scratch.
+// AccumulatorCaches provides the per-thread HalfKA accumulations. Each cache
+// contains multiple entries for each of the possible king squares, and the
+// current entry is updated before every inference instead of storing HalfKA in
+// the accumulator stack.
 // This idea, was first described by Luecx (author of Koivisto) and
 // is commonly referred to as "Finny Tables".
 struct AccumulatorCaches {
@@ -103,8 +103,7 @@ class AccumulatorStack {
 
     void evaluate(const Position&           pos,
                   const FeatureTransformer& featureTransformer,
-                  // Silence spurious warning on GCC 10
-                  [[maybe_unused]] AccumulatorCaches& cache) noexcept;
+                  AccumulatorCaches&        cache) noexcept;
 
    private:
     [[nodiscard]] AccumulatorState& mut_latest() noexcept;
@@ -112,9 +111,7 @@ class AccumulatorStack {
     void evaluate_side(Color                     perspective,
                        const Position&           pos,
                        const FeatureTransformer& featureTransformer,
-                       // Silence spurious warning on GCC 10
-                       [[maybe_unused]] AccumulatorCaches& cache,
-                       usize                               last_usable_accum) noexcept;
+                       usize                     last_usable_accum) noexcept;
 
     [[nodiscard]] usize find_last_usable_accumulator(Color perspective) const noexcept;
 
