@@ -36,6 +36,85 @@
 
 namespace Stockfish::Eval::NNUE {
 
+#if defined(VECTOR)
+
+// Computes the feature transformer's pairwise activation for each 16-bit lane,
+//
+//     min(max(a, 0) * max(b, 0) >> FtProductShift, FtOutMaxVal)
+//
+// Neither operand is clamped from above, so the product does not fit in 16 bits
+// and a plain 16-bit multiply would overflow. Computing it in 32 bits is possible
+// but costs a widening and a narrowing step per vector, roughly tripling the cost
+// of the loop on x86.
+//
+// Instead, note that the result saturates at FtOutMaxVal and
+// FtOutMaxVal << FtProductShift < 65536: any product that does not fit in the low
+// 16 bits is necessarily clamped. So mullo carries the exact product whenever the
+// result is not clamped, and a non-zero mulhi is exactly the signal that it is.
+// That turns the saturating 16-bit multiply we would like to have into a multiply
+// pair plus a select, with the shift applied to the low half only.
+//
+// Platforms with a native widening multiply (NEON, wasm) do not need the trick and
+// use a saturating narrowing shift instead.
+[[maybe_unused]] static inline SIMD::vec_t ft_product_16(SIMD::vec_t a, SIMD::vec_t b) {
+    using namespace SIMD;
+
+    #if defined(USE_NEON)
+
+    const int16x8_t q0 = vmaxq_s16(a, vdupq_n_s16(0));
+    const int16x8_t q1 = vmaxq_s16(b, vdupq_n_s16(0));
+
+    const int32x4_t plo = vmull_s16(vget_low_s16(q0), vget_low_s16(q1));
+    const int32x4_t phi = vmull_s16(vget_high_s16(q0), vget_high_s16(q1));
+
+    const uint16x8_t r = vcombine_u16(vqshrun_n_s32(plo, FtProductShift),
+                                      vqshrun_n_s32(phi, FtProductShift));
+
+    return vreinterpretq_s16_u16(vminq_u16(r, vdupq_n_u16(FtOutMaxVal)));
+
+    #elif defined(__wasm__)
+
+    const v128_t q0 = wasm_i16x8_max(a, wasm_i16x8_splat(0));
+    const v128_t q1 = wasm_i16x8_max(b, wasm_i16x8_splat(0));
+
+    const v128_t plo = wasm_i32x4_shr(wasm_i32x4_extmul_low_i16x8(q0, q1), FtProductShift);
+    const v128_t phi = wasm_i32x4_shr(wasm_i32x4_extmul_high_i16x8(q0, q1), FtProductShift);
+
+    return wasm_u16x8_min(wasm_u16x8_narrow_i32x4(plo, phi), wasm_u16x8_splat(FtOutMaxVal));
+
+    #else
+
+    const vec_t Zero = vec_zero();
+    const vec_t Max  = vec_set_16(FtOutMaxVal);
+
+    const vec_t q0 = vec_max_16(a, Zero);
+    const vec_t q1 = vec_max_16(b, Zero);
+
+    const vec_t lo = vec_mullo_16(q0, q1);
+    const vec_t hi = vec_mulhi_u16(q0, q1);
+    const vec_t v  = vec_srli_16(lo, FtProductShift);
+
+        // hi != 0 means the product overflowed 16 bits, which means it is clamped
+        #if defined(USE_AVX512)
+    return _mm512_mask_blend_epi16(_mm512_test_epi16_mask(hi, hi), v, Max);
+        #elif defined(USE_AVX2)
+    return _mm256_blendv_epi8(v, Max, _mm256_cmpgt_epi16(hi, Zero));
+        #elif defined(USE_SSE41)
+    return _mm_blendv_epi8(v, Max, _mm_cmpgt_epi16(hi, Zero));
+        #elif defined(USE_SSE2)
+    const __m128i mask = _mm_cmpgt_epi16(hi, Zero);
+    return _mm_or_si128(_mm_and_si128(mask, Max), _mm_andnot_si128(mask, v));
+        #elif defined(USE_LASX)
+    return __lasx_xvbitsel_v(Max, v, __lasx_xvseq_h(hi, Zero));
+        #elif defined(USE_LSX)
+    return __lsx_vbitsel_v(Max, v, __lsx_vseq_h(hi, Zero));
+        #endif
+
+    #endif
+}
+
+#endif  // defined(VECTOR)
+
 // Returns the inverse of a permutation
 template<usize Len>
 constexpr std::array<usize, Len> invert_permutation(const std::array<usize, Len>& order) {
@@ -251,61 +330,16 @@ class FeatureTransformer {
             static_assert((HalfDimensions / 2) % OutputChunkSize == 0);
             constexpr IndexType NumOutputChunks = HalfDimensions / 2 / OutputChunkSize;
 
-            [[maybe_unused]] const vec_t   Zero  = vec_zero();
-            [[maybe_unused]] const vec_t   FtMax = vec_set_16(FtMaxVal);
-            [[maybe_unused]] constexpr int shift = 7;
-
             const vec_t* in0 = reinterpret_cast<const vec_t*>(&(accumulation[perspectives[p]][0]));
             const vec_t* in1 =
               reinterpret_cast<const vec_t*>(&(accumulation[perspectives[p]][HalfDimensions / 2]));
             vec_t* out = reinterpret_cast<vec_t*>(output + offset);
 
-            // Per the NNUE architecture, here we want to multiply pairs of
-            // clipped elements and divide the product by 128. To do this,
-            // we can naively perform min/max operation to clip each of the
-            // four int16 vectors, mullo pairs together, then pack them into
-            // one int8 vector. However, there exists a faster way.
-
-            // The idea here is to use the implicit clipping from packus to
-            // save us two vec_max_16 instructions. This clipping works due
-            // to the fact that any int16 integer below zero will be zeroed
-            // on packus.
-
-            // Consider the case where the second element is negative.
-            // If we do standard clipping, that element will be zero, which
-            // means our pairwise product is zero. If we perform packus and
-            // remove the lower-side clip for the second element, then our
-            // product before packus will be negative, and is zeroed on pack.
-            // The two operations produce equivalent results, but the second
-            // one (using packus) saves one max operation per pair.
-
-            // But here we run into a problem: mullo does not preserve the
-            // sign of the multiplication. We can get around this by doing
-            // mulhi, which keeps the sign. But that requires an additional
-            // tweak.
-
-            // mulhi cuts off the last 16 bits of the resulting product,
-            // which is the same as performing a rightward shift of 16 bits.
-            // We can use this to our advantage. Recall that we want to
-            // divide the final product by 128, which is equivalent to a
-            // 7-bit right shift. Intuitively, if we shift the clipped
-            // value left by 9, and perform mulhi, which shifts the product
-            // right by 16 bits, then we will net a right shift of 7 bits.
-            // However, this won't work as intended. Since we clip the
-            // values to have a maximum value of 127, shifting it by 9 bits
-            // might occupy the signed bit, resulting in some positive
-            // values being interpreted as negative after the shift.
-
-            // There is a way, however, to get around this limitation. When
-            // loading the network, scale accumulator weights and biases by
-            // 2. To get the same pairwise multiplication result as before,
-            // we need to divide the product by 128 * 2 * 2 = 512, which
-            // amounts to a right shift of 9 bits. So now we only have to
-            // shift left by 7 bits, perform mulhi (shifts right by 16 bits)
-            // and net a 9 bit right shift. Since we scaled everything by
-            // two, the values are clipped at 127 * 2 = 254, which occupies
-            // 8 bits. Shifting it by 7 bits left will no longer occupy the
-            // signed bit, so we are safe.
+            // Per the NNUE architecture, here we want the pairwise product of the
+            // two ReLU'd accumulator halves, scaled back down to the int8 range
+            // the following affine layer expects. See ft_product_16() above for
+            // how the product is kept inside 16-bit lanes without clamping either
+            // operand from above.
 
             for (IndexType j = 0; j < NumOutputChunks; j += 2)
             {
@@ -314,53 +348,10 @@ class FeatureTransformer {
                 {
                     const IndexType i = (j + k) * 2;
 
-                    vec_t acc0a = in0[i + 0];
-                    vec_t acc0b = in0[i + 1];
-                    vec_t acc1a = in1[i + 0];
-                    vec_t acc1b = in1[i + 1];
+                    const vec_t pa = ft_product_16(in0[i + 0], in1[i + 0]);
+                    const vec_t pb = ft_product_16(in0[i + 1], in1[i + 1]);
 
-                    static_assert(FtMaxVal == 255);
-
-    #if defined(USE_NEON)
-                    uint16x8_t mul0 = vmull_u8(vqmovun_s16(acc0a), vqmovun_s16(acc1a));
-                    uint16x8_t mul1 = vmull_u8(vqmovun_s16(acc0b), vqmovun_s16(acc1b));
-
-                    uint8x16x2_t uzp =
-                      vuzpq_u8(vreinterpretq_u8_u16(mul0), vreinterpretq_u8_u16(mul1));
-                    uint8x16_t pab    = vshrq_n_u8(uzp.val[1], 1);
-                    vec_t      result = reinterpret_cast<vec_t>(pab);
-    #elif defined(USE_LSX) || defined(USE_LASX)
-                    vec_t pa = vec_packus_16(acc0a, acc0b);
-                    vec_t pb = vec_packus_16(acc1a, acc1b);
-
-                    vec_t hi     = vec_mulhi_8(pa, pb);
-                    vec_t result = vec_srli_8(hi, 1);
-    #elif defined(__wasm__)
-                    // _mm_mulhi_epi16 is lowered to 32-bit multiplies, so we take
-                    // a similar approach as the NEON path.
-                    vec_t mul0 = vec_packus_16(acc0a, acc0b);
-                    vec_t mul1 = vec_packus_16(acc1a, acc1b);
-
-                    vec_t low = wasm_u16x8_extmul_low_u8x16(mul0, mul1);
-                    vec_t hi  = wasm_u16x8_extmul_high_u8x16(mul0, mul1);
-
-                    // equivalent to vuzp2_u8
-                    vec_t merged = wasm_i8x16_shuffle(low, hi, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19,
-                                                      21, 23, 25, 27, 29, 31);
-                    vec_t result = wasm_u8x16_shr(merged, 1);
-    #else
-                    vec_t sum0a = vec_slli_16(vec_max_16(vec_min_16(acc0a, FtMax), Zero), shift);
-                    vec_t sum0b = vec_slli_16(vec_max_16(vec_min_16(acc0b, FtMax), Zero), shift);
-                    vec_t sum1a = vec_min_16(acc1a, FtMax);
-                    vec_t sum1b = vec_min_16(acc1b, FtMax);
-
-                    vec_t pa = vec_mulhi_16(sum0a, sum1a);
-                    vec_t pb = vec_mulhi_16(sum0b, sum1b);
-
-                    vec_t result = vec_packus_16(pa, pb);
-    #endif
-
-                    packed[k] = out[j + k] = result;
+                    packed[k] = out[j + k] = vec_packus_16(pa, pb);
                 }
 
                 cursor.record2(packed[0], packed[1]);
@@ -388,11 +379,15 @@ class FeatureTransformer {
                 acc0 = __riscv_vmax(acc0, 0, vl);
                 acc1 = __riscv_vmax(acc1, 0, vl);
 
-                vuint8m1_t pa = __riscv_vnclipu(__riscv_vreinterpret_u16m2(acc0), 0, 0, vl);
-                vuint8m1_t pb = __riscv_vnclipu(__riscv_vreinterpret_u16m2(acc1), 0, 0, vl);
+                // Widening multiply, then a saturating narrowing shift by
+                // FtProductShift; no need for the 16-bit overflow trick here.
+                vuint32m4_t prod = __riscv_vwmulu(__riscv_vreinterpret_u16m2(acc0),
+                                                  __riscv_vreinterpret_u16m2(acc1), vl);
+                vuint16m2_t nar =
+                  __riscv_vnclipu(prod, FtProductShift, __RISCV_VXRM_RDN, vl);
+                nar = __riscv_vminu(nar, FtOutMaxVal, vl);
 
-                vuint8m1_t hi     = __riscv_vmulhu(pa, pb, vl);
-                vuint8m1_t result = __riscv_vsrl(hi, 1, vl);
+                vuint8m1_t result = __riscv_vnclipu(nar, 0, __RISCV_VXRM_RDN, vl);
 
                 __riscv_vse8(&output[offset + j], result, vl);
 
@@ -416,10 +411,11 @@ class FeatureTransformer {
                 BiasType sum1 =
                   accumulation[static_cast<int>(perspectives[p])][j + HalfDimensions / 2];
 
-                sum0 = std::clamp<BiasType>(sum0, 0, FtMaxVal);
-                sum1 = std::clamp<BiasType>(sum1, 0, FtMaxVal);
+                sum0 = std::max<BiasType>(sum0, 0);
+                sum1 = std::max<BiasType>(sum1, 0);
 
-                output[offset + j] = static_cast<OutputType>(unsigned(sum0 * sum1) / 512);
+                output[offset + j] = static_cast<OutputType>(
+                  std::min(unsigned(sum0 * sum1) >> FtProductShift, unsigned(FtOutMaxVal)));
             }
 
 #endif

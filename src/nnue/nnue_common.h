@@ -62,13 +62,20 @@ using PSQTWeightType   = i32;
 using IndexType        = u32;
 
 // Version of the evaluation file
-constexpr u32 Version = 0x6A448AFAu;
+constexpr u32 Version = 0x6A448AFBu;
 
 // Constant used in evaluation value calculation
 constexpr int OutputScale     = 16;
 constexpr int WeightScaleBits = 6;
-constexpr int FtMaxVal        = 255;
 constexpr int HiddenOneVal    = 128;
+
+// The accumulator is quantized with FtOneVal per 1.0, so the pairwise product
+// of two accumulator halves carries FtOneVal^2 and has to be brought back down
+// to HiddenOneVal, i.e. shifted right by log2(FtOneVal^2 / HiddenOneVal) = 9.
+// The result is clamped to the int8 range the following affine layer expects.
+constexpr int FtOneVal        = 256;
+constexpr int FtProductShift  = 9;
+constexpr int FtOutMaxVal     = HiddenOneVal - 1;
 
 // Size of cache line (in bytes)
 constexpr usize CacheLineSize = 64;
