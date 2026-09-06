@@ -912,7 +912,28 @@ void update_accumulator_refresh_cache(Color                     perspective,
 
     ThreatFeatureSet::IndexList active;
     ThreatFeatureSet::append_active_indices(perspective, pos, active);
-    PairFeatureSet::append_active_indices(perspective, pos, active);
+    auto& pawnEntry = cache.pawnEntries[pos.pawn_key() & (AccumulatorCaches::PawnCacheSize / 4 - 1)]
+                                       [perspective][(int(ksq) >> 2) & 1];
+    const Bitboard whitePawns = pos.pieces(WHITE, PAWN);
+    const Bitboard blackPawns = pos.pieces(BLACK, PAWN);
+    const bool     pawnHit =
+      pawnEntry.pawns[WHITE] == whitePawns && pawnEntry.pawns[BLACK] == blackPawns;
+    PairFeatureSet::IndexList activePp;
+    if (!pawnHit)
+    {
+        PairFeatureSet::append_active_indices(perspective, pos, activePp);
+        pawnEntry.featureCount = u16(activePp.size());
+        pawnEntry.pawns[WHITE] = whitePawns;
+        pawnEntry.pawns[BLACK] = blackPawns;
+        if (!pawnEntry.featureCount)
+        {
+            pawnEntry.accumulation.fill(0);
+            pawnEntry.psqtAccumulation.fill(0);
+        }
+    }
+    // On a miss, build PP from zero in the same tile loop as the refresh.
+    // All ordinary and hybrid incremental updates continue to use the stack.
+    static const AccumulatorCaches::PawnEntry zeroPp{};
 
     accumulator.computed[perspective] = true;
 
@@ -930,6 +951,16 @@ void update_accumulator_refresh_cache(Color                     perspective,
 
         acc = apply_threat_features<+1>(j, acc, active, featureTransformer);
 
+        if (pawnEntry.featureCount)
+        {
+            if (!pawnHit)
+            {
+                auto pp = apply_threat_features<+1>(j, load_tile(j, zeroPp.accumulation.data()),
+                                                    activePp, featureTransformer);
+                store_tile(j, pawnEntry.accumulation.data(), pp);
+            }
+            acc = apply<+1>(j, acc, pawnEntry.accumulation.data());
+        }
         store_tile(j, accumulator.accumulation[perspective].data(), acc);
     }
 
@@ -944,6 +975,16 @@ void update_accumulator_refresh_cache(Color                     perspective,
 
         psqt = apply_psqt<+1>(j, psqt, active, featureTransformer.threatAndPpPsqtWeights.data());
 
+        if (pawnEntry.featureCount)
+        {
+            if (!pawnHit)
+            {
+                auto pp = apply_psqt<+1>(j, load_psqt(j, zeroPp.psqtAccumulation.data()), activePp,
+                                         featureTransformer.threatAndPpPsqtWeights.data());
+                store_psqt(j, pawnEntry.psqtAccumulation.data(), pp);
+            }
+            psqt = apply<+1>(j, psqt, pawnEntry.psqtAccumulation.data());
+        }
         store_psqt(j, accumulator.psqtAccumulation[perspective].data(), psqt);
     }
 }
