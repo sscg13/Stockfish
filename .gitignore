@@ -20,3 +20,5 @@ tsan.supp
 __pycache__/
 tests/syzygy
 tests/bench_tmp.epd
+rule50-*.log
+src/rule50-cache-test

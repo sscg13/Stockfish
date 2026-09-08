@@ -498,7 +498,8 @@ ifeq ($(MAKELEVEL),0)
        export ENV_LDFLAGS := $(LDFLAGS)
 endif
 
-CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
+RULE50_LAYER ?= 0
+CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS) -DRULE50_LAYER=$(RULE50_LAYER)
 DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
 LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS)
 
@@ -1097,6 +1098,16 @@ analyze: net config-sanity objclean
 	$(MAKE) -k ARCH=$(ARCH) COMP=$(COMP) $(OBJS)
 
 ifeq ($(UNIVERSAL_BUILD),false)
+.PHONY: rule50-ft-build rule50-hidden1-build rule50-hidden2-build
+.PHONY: rule50-cache-test
+rule50-cache-test: $(filter-out main.o,$(OBJS))
+	$(CXX) $(CXXFLAGS) -I. ../tests/rule50_cache.cpp $(filter-out main.o,$(OBJS)) $(LDFLAGS) -o rule50-cache-test
+# Separate targets give nettest distinct cached binaries. The shipped baseline
+# net cannot run PGO for a changed architecture; supply an experimental EvalFile.
+rule50-ft-build rule50-hidden1-build rule50-hidden2-build:
+	$(MAKE) objclean
+	$(MAKE) build RULE50_LAYER=$(if $(filter rule50-ft-build,$@),1,$(if $(filter rule50-hidden1-build,$@),2,3))
+
 build: net config-sanity
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
 

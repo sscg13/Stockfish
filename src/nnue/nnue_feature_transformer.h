@@ -151,6 +151,9 @@ class FeatureTransformer {
     void permute_weights() {
         permute<16>(biases, PackusEpi16Order);
         permute<16>(weights, PackusEpi16Order);
+#if RULE50_LAYER == 1
+        permute<16>(rule50Weights, PackusEpi16Order);
+#endif
 
         permute<8>(threatAndPpWeights, PackusEpi16Order);
     }
@@ -158,6 +161,9 @@ class FeatureTransformer {
     void unpermute_weights() {
         permute<16>(biases, InversePackusEpi16Order);
         permute<16>(weights, InversePackusEpi16Order);
+#if RULE50_LAYER == 1
+        permute<16>(rule50Weights, InversePackusEpi16Order);
+#endif
         permute<8>(threatAndPpWeights, InversePackusEpi16Order);
     }
 
@@ -178,6 +184,9 @@ class FeatureTransformer {
 
         read_leb_128(stream, weights);
         read_leb_128(stream, psqtWeights);
+#if RULE50_LAYER == 1
+        read_leb_128(stream, rule50Weights);
+#endif
 
         permute_weights();
 
@@ -200,6 +209,9 @@ class FeatureTransformer {
 
         write_leb_128<WeightType>(stream, copy->weights);
         write_leb_128<PSQTWeightType>(stream, copy->psqtWeights);
+#if RULE50_LAYER == 1
+        write_leb_128<WeightType>(stream, copy->rule50Weights);
+#endif
 
         return !stream.fail();
     }
@@ -210,6 +222,9 @@ class FeatureTransformer {
         hash_combine(h, get_raw_data_hash(biases));
         hash_combine(h, get_raw_data_hash(weights));
         hash_combine(h, get_raw_data_hash(psqtWeights));
+#if RULE50_LAYER == 1
+        hash_combine(h, get_raw_data_hash(rule50Weights));
+#endif
 
         hash_combine(h, get_raw_data_hash(threatAndPpWeights));
         hash_combine(h, get_raw_data_hash(threatAndPpPsqtWeights));
@@ -238,7 +253,11 @@ class FeatureTransformer {
         const auto& accumulation = accumulatorState.accumulation;
 
         for (IndexType p = 0; p < 2; ++p)
-            transform_perspective(accumulation[perspectives[p]], output, p, nnzInfo);
+            transform_perspective(accumulation[perspectives[p]], output, p, nnzInfo
+#if RULE50_LAYER == 1
+                                  , rule50Weights.data() + rule50_index(pos.rule50_count()) * HalfDimensions
+#endif
+            );
 
         return psqt;
     }
@@ -247,7 +266,11 @@ class FeatureTransformer {
     static void transform_perspective(const std::array<i16, HalfDimensions>&      accumulation,
                                       OutputType*                                 output,
                                       IndexType                                   perspective,
-                                      [[maybe_unused]] NNZInfo<OutputDimensions>& nnzInfo) {
+                                      [[maybe_unused]] NNZInfo<OutputDimensions>& nnzInfo
+#if RULE50_LAYER == 1
+                                      , const WeightType* clockWeights
+#endif
+                                      ) {
 
         using namespace SIMD;
         const IndexType offset = (HalfDimensions / 2) * perspective;
@@ -311,6 +334,14 @@ class FeatureTransformer {
                 vec_t acc0b = in0[i + 1];
                 vec_t acc1a = in1[i + 0];
                 vec_t acc1b = in1[i + 1];
+#if RULE50_LAYER == 1
+                const vec_t* clock0 = reinterpret_cast<const vec_t*>(clockWeights);
+                const vec_t* clock1 = reinterpret_cast<const vec_t*>(clockWeights + HalfDimensions / 2);
+                acc0a = vec_add_16(acc0a, clock0[i + 0]);
+                acc0b = vec_add_16(acc0b, clock0[i + 1]);
+                acc1a = vec_add_16(acc1a, clock1[i + 0]);
+                acc1b = vec_add_16(acc1b, clock1[i + 1]);
+#endif
 
                 static_assert(FtMaxVal == 255);
 
@@ -375,6 +406,10 @@ class FeatureTransformer {
 
             vint16m2_t acc0 = __riscv_vle16_v_i16m2(&accumulation[j], vl);
             vint16m2_t acc1 = __riscv_vle16_v_i16m2(&accumulation[j + HalfDimensions / 2], vl);
+#if RULE50_LAYER == 1
+            acc0 = __riscv_vadd(acc0, __riscv_vle16_v_i16m2(clockWeights + j, vl), vl);
+            acc1 = __riscv_vadd(acc1, __riscv_vle16_v_i16m2(clockWeights + j + HalfDimensions / 2, vl), vl);
+#endif
 
             acc0 = __riscv_vmax(acc0, 0, vl);
             acc1 = __riscv_vmax(acc1, 0, vl);
@@ -404,6 +439,10 @@ class FeatureTransformer {
         {
             BiasType sum0 = accumulation[j];
             BiasType sum1 = accumulation[j + HalfDimensions / 2];
+#if RULE50_LAYER == 1
+            sum0 += clockWeights[j];
+            sum1 += clockWeights[j + HalfDimensions / 2];
+#endif
 
             sum0 = std::clamp<BiasType>(sum0, 0, FtMaxVal);
             sum1 = std::clamp<BiasType>(sum1, 0, FtMaxVal);
@@ -417,6 +456,9 @@ class FeatureTransformer {
    public:
     alignas(CacheLineSize) BiasesArray biases;
     alignas(CacheLineSize) WeightArray weights;
+#if RULE50_LAYER == 1
+    alignas(CacheLineSize) std::array<WeightType, Rule50Rows * HalfDimensions> rule50Weights;
+#endif
 
     // Threats and pawn-pair features are concatenated into one array to allow for a single index to address either.
     // The first pawn-pair feature is at index ThreatFeatureSet::Dimensions.

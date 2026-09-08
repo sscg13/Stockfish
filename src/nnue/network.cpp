@@ -153,7 +153,7 @@ NetworkOutput Network::evaluate(const Position&    pos,
     const int  bucket     = (pos.count<ALL_PIECES>() - 1) / 4;
     const auto psqt       = featureTransformer.transform(pos, accumulatorStack, cache,
                                                          transformedFeatures, bucket, nnzInfo);
-    const auto positional = network[bucket].propagate(transformedFeatures, nnzInfo);
+    const auto positional = network[bucket].propagate(transformedFeatures, nnzInfo, pos.rule50_count());
     return {static_cast<Value>(psqt / OutputScale), static_cast<Value>(positional / OutputScale)};
 }
 
@@ -218,7 +218,7 @@ NnueEvalTrace Network::trace_evaluate(const Position&    pos,
         NNZInfo<L1> nnzInfo;
         const auto  materialist = featureTransformer.transform(pos, accumulatorStack, cache,
                                                                transformedFeatures, bucket, nnzInfo);
-        const auto  positional  = network[bucket].propagate(transformedFeatures, nnzInfo);
+        const auto  positional  = network[bucket].propagate(transformedFeatures, nnzInfo, pos.rule50_count());
 
         t.psqt[bucket]       = static_cast<Value>(materialist / OutputScale);
         t.positional[bucket] = static_cast<Value>(positional / OutputScale);

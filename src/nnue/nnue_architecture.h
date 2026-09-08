@@ -36,6 +36,15 @@
 
 namespace Stockfish::Eval::NNUE {
 
+// 0: baseline, 1: transformer, 2: first hidden, 3: second hidden.
+#ifndef RULE50_LAYER
+    #define RULE50_LAYER 0
+#endif
+static_assert(RULE50_LAYER >= 0 && RULE50_LAYER <= 3);
+constexpr int Rule50Rows = 101;
+constexpr u32 Rule50Hash = RULE50_LAYER == 0 ? 0 : 0x52353000u ^ (RULE50_LAYER << 16) ^ Rule50Rows;
+inline int rule50_index(int clock) { return std::clamp(clock, 0, Rule50Rows - 1); }
+
 // Input features used in evaluation function
 using ThreatFeatureSet = Features::FullThreats;
 using PairFeatureSet   = Features::PP_3Wide;
@@ -67,6 +76,10 @@ struct NetworkArchitecture {
     Layers::SqrClippedReLU<FC_1_OUTPUTS, WeightScaleBits>                          ac_sqr_1;
     Layers::ClippedReLU<FC_1_OUTPUTS, WeightScaleBits>                             ac_1;
     Layers::AffineTransform<FC_0_OUTPUTS * 2 + FC_1_OUTPUTS * 2, 1>                fc_2;
+#if RULE50_LAYER >= 2
+    static constexpr int Rule50Width = RULE50_LAYER == 2 ? FC_0_OUTPUTS : FC_1_OUTPUTS;
+    alignas(CacheLineSize) std::array<i32, Rule50Rows * Rule50Width> rule50Weights;
+#endif
 
     // Hash value embedded in the evaluation file
     static constexpr u32 get_hash_value() {
@@ -82,25 +95,36 @@ struct NetworkArchitecture {
         hashValue = decltype(ac_1)::get_hash_value(hashValue);
         hashValue = decltype(fc_2)::get_hash_value(hashValue);
 
-        return hashValue;
+        return hashValue ^ Rule50Hash;
     }
 
     // Read network parameters
     bool read_parameters(std::istream& stream) {
-        return fc_0.read_parameters(stream) && ac_0.read_parameters(stream)
+        bool ok = fc_0.read_parameters(stream) && ac_0.read_parameters(stream)
             && fc_1.read_parameters(stream) && ac_1.read_parameters(stream)
             && fc_2.read_parameters(stream);
+#if RULE50_LAYER >= 2
+        if (ok)
+            read_little_endian(stream, rule50Weights.data(), rule50Weights.size());
+#endif
+        return ok && !stream.fail();
     }
 
     // Write network parameters
     bool write_parameters(std::ostream& stream) const {
-        return fc_0.write_parameters(stream) && ac_0.write_parameters(stream)
+        bool ok = fc_0.write_parameters(stream) && ac_0.write_parameters(stream)
             && fc_1.write_parameters(stream) && ac_1.write_parameters(stream)
             && fc_2.write_parameters(stream);
+#if RULE50_LAYER >= 2
+        if (ok)
+            write_little_endian(stream, rule50Weights.data(), rule50Weights.size());
+#endif
+        return ok && !stream.fail();
     }
 
     i32 propagate(const TransformedFeatureType* transformedFeatures,
-                  const NNZInfo<L1>&            nnzInfo) const {
+                  const NNZInfo<L1>&            nnzInfo,
+                  [[maybe_unused]] int          rule50) const {
         struct alignas(CacheLineSize) Buffer {
             alignas(CacheLineSize) typename decltype(fc_0)::OutputBuffer fc_0_out;
             alignas(CacheLineSize) typename decltype(ac_sqr_0)::OutputType
@@ -112,6 +136,11 @@ struct NetworkArchitecture {
         Buffer buffer;
 
         fc_0.propagate(transformedFeatures, buffer.fc_0_out, nnzInfo);
+#if RULE50_LAYER == 2
+        // Includes the two units used by the direct output skip.
+        for (int i = 0; i < FC_0_OUTPUTS; ++i)
+            buffer.fc_0_out[i] += rule50Weights[rule50_index(rule50) * Rule50Width + i];
+#endif
 #if defined(USE_PAIR_ACTIVATIONS)
         ac_sqr_0.propagate_pair(buffer.fc_0_out, buffer.concat_buffer,
                                 buffer.concat_buffer + FC_0_OUTPUTS);
@@ -121,6 +150,10 @@ struct NetworkArchitecture {
 #endif
 
         fc_1.propagate(buffer.concat_buffer, buffer.fc_1_out);
+#if RULE50_LAYER == 3
+        for (int i = 0; i < FC_1_OUTPUTS; ++i)
+            buffer.fc_1_out[i] += rule50Weights[rule50_index(rule50) * Rule50Width + i];
+#endif
 #if defined(USE_PAIR_ACTIVATIONS)
         ac_sqr_1.propagate_pair(buffer.fc_1_out, buffer.concat_buffer + FC_0_OUTPUTS * 2,
                                 buffer.concat_buffer + FC_0_OUTPUTS * 2 + FC_1_OUTPUTS);
@@ -156,6 +189,9 @@ struct NetworkArchitecture {
         // hash_combine(h, ac_sqr_1.get_content_hash()); TODO
         hash_combine(h, ac_1.get_content_hash());
         hash_combine(h, fc_2.get_content_hash());
+#if RULE50_LAYER >= 2
+        hash_combine(h, get_raw_data_hash(rule50Weights));
+#endif
         hash_combine(h, get_hash_value());
         return h;
     }
