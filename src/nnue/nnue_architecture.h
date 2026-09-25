@@ -41,9 +41,13 @@ namespace Stockfish::Eval::NNUE {
     #define RULE50_LAYER 0
 #endif
 static_assert(RULE50_LAYER >= 0 && RULE50_LAYER <= 3);
-constexpr int Rule50Rows = 101;
-constexpr u32 Rule50Hash = RULE50_LAYER == 0 ? 0 : 0x52353000u ^ (RULE50_LAYER << 16) ^ Rule50Rows;
-inline int rule50_index(int clock) { return std::clamp(clock, 0, Rule50Rows - 1); }
+// Match the rule50 ranges in Position::key(): 0..13, then groups of eight.
+// Positions at or beyond the claim threshold share the last trained row.
+constexpr int Rule50Rows = 12;
+constexpr u32 Rule50Hash = RULE50_LAYER == 0 ? 0 : 0x52355400u ^ (RULE50_LAYER << 16) ^ Rule50Rows;
+inline int rule50_index(int clock) {
+    return clock < 14 ? 0 : std::min(1 + (clock - 14) / 8, Rule50Rows - 1);
+}
 
 // Input features used in evaluation function
 using ThreatFeatureSet = Features::FullThreats;
