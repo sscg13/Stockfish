@@ -23,6 +23,7 @@
 #include <array>
 #include <cstdint>
 #include <initializer_list>
+#include <utility>
 
 #include "../../attacks.h"
 #include "../../bitboard.h"
@@ -43,6 +44,12 @@ struct alignas(64) ThreatLUTs {
 constexpr std::array<Piece, 12> AllPieces = {
   W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING,
   B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING,
+};
+
+// Counts of the enabled prefix of each map row for friendly and enemy targets.
+// This drops P->N, P->R, N->R, N->Q and B->R only against enemy pieces.
+constexpr int TargetCounts[PIECE_TYPE_NB][2] = {
+  {0, 0}, {2, 0}, {5, 3}, {4, 3}, {4, 4}, {5, 5}, {0, 0},
 };
 
 constexpr auto init_threat_luts() {
@@ -77,32 +84,34 @@ constexpr auto init_threat_luts() {
     {
         const PieceType attackerType          = type_of(attacker);
         const IndexType cumulativePieceOffset = offsets[attackerType];
-        const IndexType validTargets          = numValidTargets[attacker];
+        const auto&     targetCounts          = TargetCounts[attackerType];
+        const int       whiteTargets          = targetCounts[color_of(attacker) == BLACK];
 
         for (Piece attacked : AllPieces)
         {
-            bool      enemy        = (attacker ^ attacked) == 8;
+            bool      enemy        = color_of(attacker) != color_of(attacked);
             PieceType attackedType = type_of(attacked);
 
             int  map           = FullThreats::map[attackerType - 1][attackedType - 1];
             bool semi_excluded = attackerType == attackedType && (enemy || attackerType != PAWN);
-            IndexType feature =
-              cumulativeOffset
-              + (color_of(attacked) * (validTargets / 2) + map) * cumulativePieceOffset;
+            int  slot          = map + (color_of(attacked) == BLACK ? whiteTargets : 0);
+            IndexType feature  = cumulativeOffset + slot * cumulativePieceOffset;
 
-            bool excluded                      = map < 0;
+            bool excluded                      = map < 0 || map >= targetCounts[enemy];
             tables.lut1[attacker][attacked][0] = excluded ? FullThreats::Dimensions : feature;
             tables.lut1[attacker][attacked][1] =
               excluded || semi_excluded ? FullThreats::Dimensions : feature;
         }
 
-        cumulativeOffset += validTargets * cumulativePieceOffset;
+        cumulativeOffset += (targetCounts[0] + targetCounts[1]) * cumulativePieceOffset;
     }
 
-    return tables;
+    return std::pair{tables, cumulativeOffset};
 }
 
-constexpr ThreatLUTs threat_luts = init_threat_luts();
+constexpr auto threat_layout = init_threat_luts();
+static_assert(threat_layout.second == FullThreats::Dimensions);
+constexpr const ThreatLUTs& threat_luts = threat_layout.first;
 
 // Index of a feature for a given king position and another piece on some square
 sf_always_inline IndexType FullThreats::make_index(

@@ -29,18 +29,13 @@ class Position;
 
 namespace Stockfish::Eval::NNUE::Features {
 
-// Pawn diagonal threats only target knights and rooks (pawn-pawn relationships
-// are handled by the PP_3Wide feature set), so pawns have 4 valid targets.
-static constexpr int numValidTargets[PIECE_NB] = {0, 4, 10, 8, 8, 10, 0, 0,
-                                                  0, 4, 10, 8, 8, 10, 0, 0};
-
 class FullThreats {
    public:
     // Hash value embedded in the evaluation file
-    static constexpr u32 HashValue = 0x2c41eaeau;
+    static constexpr u32 HashValue = 0x2c41eaebu;
 
     // Number of feature dimensions
-    static constexpr IndexType Dimensions = 59808;
+    static constexpr IndexType Dimensions = 57008;
 
     // clang-format off
     static constexpr int map[PIECE_TYPE_NB-2][PIECE_TYPE_NB-2] = {
