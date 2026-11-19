@@ -172,7 +172,7 @@ Value Network::evaluate(const Position&    pos,
 
     featureTransformer.transform(pos, accumulatorStack, cache, transformedFeatures, nnzInfo);
     const auto positional = network[bucket].propagate(transformedFeatures, nnzInfo);
-    return static_cast<Value>(positional / OutputScale);
+    return static_cast<Value>((static_cast<i64>(positional) * 106) / (100 * OutputScale));
 }
 
 
