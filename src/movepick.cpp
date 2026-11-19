@@ -213,6 +213,10 @@ ExtMove* MovePicker::generate_and_score() {
     const auto* ch5      = Type == QUIETS ? continuationHistory[5] : nullptr;
     const auto* lph =
       Type == QUIETS && ply < LOW_PLY_HISTORY_SIZE ? &(*lowPlyHistory)[ply] : nullptr;
+    const auto* whiteNonPawnHist =
+      Type == QUIETS ? &sharedHistory->nonpawn_entry(pos, WHITE) : nullptr;
+    const auto* blackNonPawnHist =
+      Type == QUIETS ? &sharedHistory->nonpawn_entry(pos, BLACK) : nullptr;
 
     ExtMove* it = cur;
     for (auto move : ml)
@@ -237,6 +241,7 @@ ExtMove* MovePicker::generate_and_score() {
             // histories
             int value = 2 * (*mainHist)[m.raw()];
             value += 2 * (*pawnHist)[pc][to];
+            value += ((*whiteNonPawnHist)[pc][to] + (*blackNonPawnHist)[pc][to]) / 2;
             value += (*ch0)[pc][to];
             value += (*ch1)[pc][to];
             value += (*ch2)[pc][to];

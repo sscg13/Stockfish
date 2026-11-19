@@ -718,6 +718,7 @@ void Search::Worker::clear() {
     // The constant-size continuation history is initialized by thread 0 of each NUMA node.
     sharedHistory.correctionHistory.clear_range(-5, numaThreadIdx, numaTotal);
     sharedHistory.pawnHistory.clear_range(-1338, numaThreadIdx, numaTotal);
+    sharedHistory.nonPawnHistory.clear_range(0, numaThreadIdx, numaTotal);
 
     if (numaThreadIdx == 0)
         for (bool inCheck : {false, true})
@@ -2071,16 +2072,19 @@ void update_continuation_histories(Stack* ss, Piece pc, Square to, int bonus) {
 void update_quiet_histories(
   const Position& pos, Stack* ss, Search::Worker& workerThread, Move move, int bonus) {
 
-    Color us = pos.side_to_move();
+    const Color  us = pos.side_to_move();
+    const Piece  pc = pos.moved_piece(move);
+    const Square to = move.to_sq();
     workerThread.mainHistory[us][move.raw()] << bonus;  // Untuned to prevent duplicate effort
 
     if (ss->ply < LOW_PLY_HISTORY_SIZE)
         workerThread.lowPlyHistory[ss->ply][move.raw()] << bonus * 712 / 1024;
 
-    update_continuation_histories(ss, pos.moved_piece(move), move.to_sq(), bonus * 750 / 1024);
+    update_continuation_histories(ss, pc, to, bonus * 750 / 1024);
 
-    workerThread.sharedHistory.pawn_entry(pos)[pos.moved_piece(move)][move.to_sq()]
-      << bonus * (bonus > -4 ? 1104 : 459) / 1024;
+    workerThread.sharedHistory.pawn_entry(pos)[pc][to] << bonus * (bonus > -4 ? 1104 : 459) / 1024;
+    for (Color c : {WHITE, BLACK})
+        workerThread.sharedHistory.nonpawn_entry(pos, c)[pc][to] << bonus / 2;
 }
 }
 

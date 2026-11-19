@@ -41,8 +41,13 @@ constexpr int CORRHIST_BASE_SIZE       = UINT_16_HISTORY_SIZE;
 constexpr int CORRECTION_HISTORY_LIMIT = 1024;
 constexpr int LOW_PLY_HISTORY_SIZE     = 5;
 
+constexpr int NONPAWN_HISTORY_BASE_SIZE = 2048;
+
 static_assert((PAWN_HISTORY_BASE_SIZE & (PAWN_HISTORY_BASE_SIZE - 1)) == 0,
               "PAWN_HISTORY_BASE_SIZE has to be a power of 2");
+
+static_assert((NONPAWN_HISTORY_BASE_SIZE & (NONPAWN_HISTORY_BASE_SIZE - 1)) == 0,
+              "NONPAWN_HISTORY_BASE_SIZE has to be a power of 2");
 
 static_assert((CORRHIST_BASE_SIZE & (CORRHIST_BASE_SIZE - 1)) == 0,
               "CORRHIST_BASE_SIZE has to be a power of 2");
@@ -144,6 +149,10 @@ using ContinuationHistory = MultiArray<PieceToHistory, PIECE_NB, SQUARE_NB>;
 // PawnHistory is addressed by the pawn structure and a move's [piece][to]
 using PawnHistory = DynStats<AtomicStats<i16, 8192, PIECE_NB, SQUARE_NB>, PAWN_HISTORY_BASE_SIZE>;
 
+// Each color's non-pawn position has its own history of quiet moves by [piece][to].
+using NonPawnHistory =
+  DynStats<AtomicStats<i16, 8192, COLOR_NB, PIECE_NB, SQUARE_NB>, NONPAWN_HISTORY_BASE_SIZE>;
+
 // Correction histories record differences between the static evaluation of
 // positions and their search score. It is used to improve the static evaluation
 // used by some search heuristics.
@@ -206,7 +215,8 @@ struct SharedHistories {
     SharedHistories(usize threadCount) :
         correctionHistory(threadCount),
         continuationHistoryBlock(make_unique_large_page<ContinuationHistoryBlock>()),
-        pawnHistory(threadCount) {
+        pawnHistory(threadCount),
+        nonPawnHistory(threadCount) {
         assert((threadCount & (threadCount - 1)) == 0 && threadCount != 0);
         sizeMinus1         = correctionHistory.get_size() - 1;
         pawnHistSizeMinus1 = pawnHistory.get_size() - 1;
@@ -221,6 +231,13 @@ struct SharedHistories {
     }
     const auto& pawn_entry(const Position& pos) const {
         return pawnHistory[pos.pawn_key() & pawnHistSizeMinus1];
+    }
+
+    auto& nonpawn_entry(const Position& pos, Color c) {
+        return nonPawnHistory[pos.non_pawn_key(c) & (nonPawnHistory.get_size() - 1)][c];
+    }
+    const auto& nonpawn_entry(const Position& pos, Color c) const {
+        return nonPawnHistory[pos.non_pawn_key(c) & (nonPawnHistory.get_size() - 1)][c];
     }
 
     auto& pawn_correction_entry(const Position& pos) {
@@ -249,6 +266,7 @@ struct SharedHistories {
     UnifiedCorrectionHistory               correctionHistory;
     LargePagePtr<ContinuationHistoryBlock> continuationHistoryBlock;
     PawnHistory                            pawnHistory;
+    NonPawnHistory                         nonPawnHistory;
 
 
    private:
