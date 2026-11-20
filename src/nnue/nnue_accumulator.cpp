@@ -134,6 +134,8 @@ void AccumulatorStack::evaluate_side(Color                     perspective,
             && accumulators[size - 2].computed[perspective]
             && pos.count<ALL_PIECES>() >= MIN_PC_COUNT_HYBRID
             && ((int(dirtyPiece.from) & 0b100) == (int(dirtyPiece.to) & 0b100))
+            && PairFeatureSet::king_bucket(perspective, dirtyPiece.from)
+                 == PairFeatureSet::king_bucket(perspective, dirtyPiece.to)
             && dirtyPiece.add_sq == SQ_NONE)  // excludes castling
         {
             update_accumulator_hybrid(perspective, pos, featureTransformer, mut_latest(),
@@ -495,6 +497,39 @@ apply_features(IndexType j, Tile acc, const u16* indices, int count, const i8* w
     return acc;
 }
 
+// Threats use global indices and PP uses local indices in the selected bucket.
+struct ThreatAndPpIndices {
+    ThreatFeatureSet::IndexList indices;
+    int                         threatCount = 0;
+
+    void mark_threat_end() { threatCount = indices.ssize(); }
+};
+
+static_assert(PairFeatureSet::MaterialBlocks == PSQFeatureSet::NumBlocks);
+
+const ThreatWeightType*
+pp_weights(const FeatureTransformer& ft, int materialBlock, Color perspective, Square ksq) {
+    const auto row =
+      PairFeatureSet::IndexBase + PairFeatureSet::bucket_offset(materialBlock, perspective, ksq);
+    return ft.threatAndPpWeights.data() + usize(row) * Dimensions;
+}
+
+template<int sign>
+sf_always_inline Tile apply_index_span_but_odd(
+  IndexType j, Tile acc, const u16* indices, int count, const i8* weights, const i8*& odd) {
+#if defined(USE_PAIRED_WIDENING_ADD)
+    if (odd && count)
+    {
+        acc = apply_feature_pair<sign>(acc, odd, &weights[usize(*indices++) * Dimensions]);
+        --count;
+        odd = nullptr;
+    }
+    if (count % 2 != 0)
+        odd = &weights[usize(indices[--count]) * Dimensions];
+#endif
+    return apply_features<sign>(j, acc, indices, count, weights);
+}
+
 // Applies one sign's psq and threat/pp rows. With paired widening, an odd row is held back
 // in `odd` so it can be combined with the other sign's odd row.
 template<int sign, typename PsqRows>
@@ -503,8 +538,10 @@ sf_always_inline Tile apply_features_but_odd(IndexType                 j,
                                              const PsqRows&            psq,
                                              const u16*                thr,
                                              int                       thrCount,
+                                             int                       ppCount,
                                              const FeatureTransformer& ft,
                                              const WeightType*         psqBase,
+                                             const ThreatWeightType*   ppBase,
                                              const i8*&                odd) {
     const auto* thrWeights = &ft.threatAndPpWeights[j];
     const int   psqCount   = int(psq.size());
@@ -520,26 +557,16 @@ sf_always_inline Tile apply_features_but_odd(IndexType                 j,
     for (; i + 1 < psqCount; i += 2)
         acc = apply_feature_pair<sign>(acc, psqRow(i), psqRow(i + 1));
 
-    // Pair the odd psq row with the first threat/pp row of the same sign, if any.
     if (i < psqCount)
-    {
-        if (thrCount == 0)
-        {
-            odd = psqRow(i);
-            return acc;
-        }
-        acc = apply_feature_pair<sign>(acc, psqRow(i), &thrWeights[usize(thr[0]) * Dimensions]);
-        ++thr;
-        --thrCount;
-    }
-
-    if (thrCount % 2 != 0)
-        odd = &thrWeights[usize(thr[--thrCount]) * Dimensions];
+        odd = psqRow(i);
 #else
     for (; i < psqCount; ++i)
         acc = apply_feature_single<sign>(j, acc, psqRow(i));
 #endif
-    return apply_features<sign>(j, acc, thr, thrCount, thrWeights);
+    acc = apply_index_span_but_odd<sign>(j, acc, thr, thrCount, thrWeights, odd);
+    if (ppCount)
+        acc = apply_index_span_but_odd<sign>(j, acc, thr + thrCount, ppCount, ppBase + j, odd);
+    return acc;
 }
 
 sf_always_inline Tile apply_odd_features(IndexType j,
@@ -564,46 +591,61 @@ sf_always_inline Tile apply_psq_features(IndexType                       j,
                                          const FeatureTransformer&       ft,
                                          const WeightType*               psqWeights) {
     const i8 *oddRemoved, *oddAdded;
-    acc = apply_features_but_odd<-1>(j, acc, removed, nullptr, 0, ft, psqWeights, oddRemoved);
-    acc = apply_features_but_odd<+1>(j, acc, added, nullptr, 0, ft, psqWeights, oddAdded);
+    acc = apply_features_but_odd<-1>(j, acc, removed, nullptr, 0, 0, ft, psqWeights, nullptr,
+                                     oddRemoved);
+    acc =
+      apply_features_but_odd<+1>(j, acc, added, nullptr, 0, 0, ft, psqWeights, nullptr, oddAdded);
     return apply_odd_features(j, acc, oddRemoved, oddAdded);
 }
 
 template<int sign>
-sf_always_inline Tile apply_threat_features(IndexType                          j,
-                                            Tile                               acc,
-                                            const ThreatFeatureSet::IndexList& list,
-                                            const FeatureTransformer&          ft) {
-    return apply_features<sign>(j, acc, list.begin(), list.ssize(), &ft.threatAndPpWeights[j]);
+sf_always_inline Tile apply_threat_features(IndexType                 j,
+                                            Tile                      acc,
+                                            const ThreatAndPpIndices& list,
+                                            const FeatureTransformer& ft,
+                                            const ThreatWeightType*   ppBase) {
+    const i8*   odd     = nullptr;
+    const auto* indices = list.indices.begin();
+    acc                 = apply_index_span_but_odd<sign>(j, acc, indices, list.threatCount,
+                                                         &ft.threatAndPpWeights[j], odd);
+    acc                 = apply_index_span_but_odd<sign>(j, acc, indices + list.threatCount,
+                                                         list.indices.ssize() - list.threatCount, ppBase + j, odd);
+    if (odd)
+        acc = apply_feature_single<sign>(j, acc, odd);
+    return acc;
 }
 
 template<typename PsqRemoved, typename PsqAdded>
-sf_always_inline Tile apply_combined_features(IndexType                          j,
-                                              Tile                               acc,
-                                              const PsqRemoved&                  psqRemoved,
-                                              const ThreatFeatureSet::IndexList& thrRemoved,
-                                              const PsqAdded&                    psqAdded,
-                                              const ThreatFeatureSet::IndexList& thrAdded,
-                                              const FeatureTransformer&          ft,
-                                              const WeightType*                  psqBase) {
+sf_always_inline Tile apply_combined_features(IndexType                 j,
+                                              Tile                      acc,
+                                              const PsqRemoved&         psqRemoved,
+                                              const ThreatAndPpIndices& thrRemoved,
+                                              const PsqAdded&           psqAdded,
+                                              const ThreatAndPpIndices& thrAdded,
+                                              const FeatureTransformer& ft,
+                                              const WeightType*         psqBase,
+                                              const ThreatWeightType*   ppBase) {
     const i8 *oddRemoved, *oddAdded;
-    acc = apply_features_but_odd<-1>(j, acc, psqRemoved, thrRemoved.begin(), thrRemoved.ssize(), ft,
-                                     psqBase, oddRemoved);
-    acc = apply_features_but_odd<+1>(j, acc, psqAdded, thrAdded.begin(), thrAdded.ssize(), ft,
-                                     psqBase, oddAdded);
+    acc = apply_features_but_odd<-1>(
+      j, acc, psqRemoved, thrRemoved.indices.begin(), thrRemoved.threatCount,
+      thrRemoved.indices.ssize() - thrRemoved.threatCount, ft, psqBase, ppBase, oddRemoved);
+    acc = apply_features_but_odd<+1>(
+      j, acc, psqAdded, thrAdded.indices.begin(), thrAdded.threatCount,
+      thrAdded.indices.ssize() - thrAdded.threatCount, ft, psqBase, ppBase, oddAdded);
     return apply_odd_features(j, acc, oddRemoved, oddAdded);
 }
 
 template<int RemovedCount, int AddedCount>
-void apply_combined(Color                              perspective,
-                    const FeatureTransformer&          featureTransformer,
-                    const AccumulatorState&            from,
-                    AccumulatorState&                  to,
-                    const PSQFeatureSet::IndexList&    psqAdded,
-                    const PSQFeatureSet::IndexList&    psqRemoved,
-                    const ThreatFeatureSet::IndexList& thrAdded,
-                    const ThreatFeatureSet::IndexList& thrRemoved,
-                    const WeightType*                  psqWeights) {
+void apply_combined(Color                           perspective,
+                    const FeatureTransformer&       featureTransformer,
+                    const AccumulatorState&         from,
+                    AccumulatorState&               to,
+                    const PSQFeatureSet::IndexList& psqAdded,
+                    const PSQFeatureSet::IndexList& psqRemoved,
+                    const ThreatAndPpIndices&       thrAdded,
+                    const ThreatAndPpIndices&       thrRemoved,
+                    const WeightType*               psqWeights,
+                    const ThreatWeightType*         ppBase) {
 
     static_assert(RemovedCount == 1 || RemovedCount == 2);
     static_assert(AddedCount == 1 || AddedCount == 2);
@@ -623,21 +665,22 @@ void apply_combined(Color                              perspective,
         Tile acc = load_tile(j, fromAcc.data());
 
         acc = apply_combined_features(j, acc, removedWeights, thrRemoved, addedWeights, thrAdded,
-                                      featureTransformer, psqWeights);
+                                      featureTransformer, psqWeights, ppBase);
 
         store_tile(j, toAcc.data(), acc);
     }
 }
 
-void apply_combined(Color                              perspective,
-                    const FeatureTransformer&          featureTransformer,
-                    const AccumulatorState&            from,
-                    AccumulatorState&                  to,
-                    const PSQFeatureSet::IndexList&    psqAdded,
-                    const PSQFeatureSet::IndexList&    psqRemoved,
-                    const ThreatFeatureSet::IndexList& thrAdded,
-                    const ThreatFeatureSet::IndexList& thrRemoved,
-                    const WeightType*                  psqWeights) {
+void apply_combined(Color                           perspective,
+                    const FeatureTransformer&       featureTransformer,
+                    const AccumulatorState&         from,
+                    AccumulatorState&               to,
+                    const PSQFeatureSet::IndexList& psqAdded,
+                    const PSQFeatureSet::IndexList& psqRemoved,
+                    const ThreatAndPpIndices&       thrAdded,
+                    const ThreatAndPpIndices&       thrRemoved,
+                    const WeightType*               psqWeights,
+                    const ThreatWeightType*         ppBase) {
     assert(psqRemoved.size() == 1 || psqRemoved.size() == 2);
     assert(psqAdded.size() == 1 || psqAdded.size() == 2);
 
@@ -646,19 +689,19 @@ void apply_combined(Color                              perspective,
     {
         if (psqAdded.size() == 1)
             apply_combined<1, 1>(perspective, featureTransformer, from, to, psqAdded, psqRemoved,
-                                 thrAdded, thrRemoved, psqWeights);
+                                 thrAdded, thrRemoved, psqWeights, ppBase);
         else
             apply_combined<1, 2>(perspective, featureTransformer, from, to, psqAdded, psqRemoved,
-                                 thrAdded, thrRemoved, psqWeights);
+                                 thrAdded, thrRemoved, psqWeights, ppBase);
     }
     else
     {
         if (psqAdded.size() == 1)
             apply_combined<2, 1>(perspective, featureTransformer, from, to, psqAdded, psqRemoved,
-                                 thrAdded, thrRemoved, psqWeights);
+                                 thrAdded, thrRemoved, psqWeights, ppBase);
         else
             apply_combined<2, 2>(perspective, featureTransformer, from, to, psqAdded, psqRemoved,
-                                 thrAdded, thrRemoved, psqWeights);
+                                 thrAdded, thrRemoved, psqWeights, ppBase);
     }
 }
 
@@ -677,36 +720,40 @@ void update_accumulator_incremental(Color                     perspective,
     // That might depend on the feature set and generally relies on the
     // feature set's update cost calculation to be correct and never allow
     // updates with more added/removed features than MaxActiveDimensions.
-    PSQFeatureSet::IndexList    psqRemoved, psqAdded;
-    ThreatFeatureSet::IndexList thrRemoved, thrAdded;
+    PSQFeatureSet::IndexList psqRemoved, psqAdded;
+    ThreatAndPpIndices       thrRemoved, thrAdded;
 
     const auto& dirtyPiece     = Forward ? target_state.dirtyPiece : computed.dirtyPiece;
     const auto& dirtyThreats   = Forward ? target_state.dirtyThreats : computed.dirtyThreats;
     const auto& dirtyPawnPairs = Forward ? target_state.dirtyPawnPairs : computed.dirtyPawnPairs;
 
-    // Used solely for prefetching
-    const auto* threatPpBase = &featureTransformer.threatAndPpWeights[0];
-    IndexType   pfStride     = FeatureTransformer::OutputDimensions;
+    const auto* threatBase = featureTransformer.threatAndPpWeights.data();
+    const auto* ppBase     = pp_weights(featureTransformer, psqBlock, perspective, ksq);
+    IndexType   pfStride   = FeatureTransformer::OutputDimensions;
 
     if constexpr (Forward)
     {
-        ThreatFeatureSet::append_changed_indices(perspective, ksq, dirtyThreats, thrRemoved,
-                                                 thrAdded, threatPpBase, pfStride);
-        PairFeatureSet::append_changed_indices(perspective, ksq, dirtyPawnPairs, thrRemoved,
-                                               thrAdded, threatPpBase, pfStride);
+        ThreatFeatureSet::append_changed_indices(perspective, ksq, dirtyThreats, thrRemoved.indices,
+                                                 thrAdded.indices, threatBase, pfStride);
+        thrRemoved.mark_threat_end();
+        thrAdded.mark_threat_end();
+        PairFeatureSet::append_changed_indices(perspective, ksq, dirtyPawnPairs, thrRemoved.indices,
+                                               thrAdded.indices, ppBase, pfStride);
         PSQFeatureSet::append_changed_indices(perspective, ksq, dirtyPiece, psqRemoved, psqAdded);
     }
     else
     {
-        ThreatFeatureSet::append_changed_indices(perspective, ksq, dirtyThreats, thrAdded,
-                                                 thrRemoved, threatPpBase, pfStride);
-        PairFeatureSet::append_changed_indices(perspective, ksq, dirtyPawnPairs, thrAdded,
-                                               thrRemoved, threatPpBase, pfStride);
+        ThreatFeatureSet::append_changed_indices(perspective, ksq, dirtyThreats, thrAdded.indices,
+                                                 thrRemoved.indices, threatBase, pfStride);
+        thrRemoved.mark_threat_end();
+        thrAdded.mark_threat_end();
+        PairFeatureSet::append_changed_indices(perspective, ksq, dirtyPawnPairs, thrAdded.indices,
+                                               thrRemoved.indices, ppBase, pfStride);
         PSQFeatureSet::append_changed_indices(perspective, ksq, dirtyPiece, psqAdded, psqRemoved);
     }
 
     apply_combined(perspective, featureTransformer, computed, target_state, psqAdded, psqRemoved,
-                   thrAdded, thrRemoved, featureTransformer.psq_weights(psqBlock));
+                   thrAdded, thrRemoved, featureTransformer.psq_weights(psqBlock), ppBase);
 
     target_state.computed[perspective] = true;
 }
@@ -724,18 +771,28 @@ void update_accumulator_incremental_both(const FeatureTransformer& featureTransf
     assert(!target_state.computed[WHITE]);
     assert(!target_state.computed[BLACK]);
 
-    PSQFeatureSet::IndexList    psq_removed[COLOR_NB], psq_added[COLOR_NB];
-    ThreatFeatureSet::IndexList thr_removed[COLOR_NB], thr_added[COLOR_NB];
+    PSQFeatureSet::IndexList psq_removed[COLOR_NB], psq_added[COLOR_NB];
+    ThreatAndPpIndices       thr_removed[COLOR_NB], thr_added[COLOR_NB];
 
-    const auto* threat_pp_base = &featureTransformer.threatAndPpWeights[0];
-    const auto  pf_stride      = FeatureTransformer::OutputDimensions;
+    const auto*             threat_base        = featureTransformer.threatAndPpWeights.data();
+    const ThreatWeightType* pp_bases[COLOR_NB] = {
+      pp_weights(featureTransformer, whiteBlock, WHITE, white_ksq),
+      pp_weights(featureTransformer, blackBlock, BLACK, black_ksq)};
+    const auto pf_stride = FeatureTransformer::OutputDimensions;
 
     ThreatFeatureSet::append_changed_indices_both(
-      white_ksq, black_ksq, target_state.dirtyThreats, thr_removed[WHITE], thr_added[WHITE],
-      thr_removed[BLACK], thr_added[BLACK], threat_pp_base, pf_stride);
+      white_ksq, black_ksq, target_state.dirtyThreats, thr_removed[WHITE].indices,
+      thr_added[WHITE].indices, thr_removed[BLACK].indices, thr_added[BLACK].indices, threat_base,
+      pf_stride);
+    for (Color c : {WHITE, BLACK})
+    {
+        thr_removed[c].mark_threat_end();
+        thr_added[c].mark_threat_end();
+    }
     PairFeatureSet::append_changed_indices_both(
-      white_ksq, black_ksq, target_state.dirtyPawnPairs, thr_removed[WHITE], thr_added[WHITE],
-      thr_removed[BLACK], thr_added[BLACK], threat_pp_base, pf_stride);
+      white_ksq, black_ksq, target_state.dirtyPawnPairs, thr_removed[WHITE].indices,
+      thr_added[WHITE].indices, thr_removed[BLACK].indices, thr_added[BLACK].indices, pp_bases,
+      pf_stride);
     PSQFeatureSet::append_changed_indices(WHITE, white_ksq, target_state.dirtyPiece,
                                           psq_removed[WHITE], psq_added[WHITE]);
     PSQFeatureSet::append_changed_indices(BLACK, black_ksq, target_state.dirtyPiece,
@@ -743,10 +800,10 @@ void update_accumulator_incremental_both(const FeatureTransformer& featureTransf
 
     apply_combined(WHITE, featureTransformer, computed, target_state, psq_added[WHITE],
                    psq_removed[WHITE], thr_added[WHITE], thr_removed[WHITE],
-                   featureTransformer.psq_weights(whiteBlock));
+                   featureTransformer.psq_weights(whiteBlock), pp_bases[WHITE]);
     apply_combined(BLACK, featureTransformer, computed, target_state, psq_added[BLACK],
                    psq_removed[BLACK], thr_added[BLACK], thr_removed[BLACK],
-                   featureTransformer.psq_weights(blackBlock));
+                   featureTransformer.psq_weights(blackBlock), pp_bases[BLACK]);
 
     target_state.computed[WHITE] = true;
     target_state.computed[BLACK] = true;
@@ -945,13 +1002,17 @@ void update_accumulator_hybrid(Color                     perspective,
     append_changed_psq_indices(perspective, newKsq, newEntry.pieces, newEntry.pieceBB,
                                currentPieces, pos.pieces(), newRemove, newAdd);
 
-    ThreatFeatureSet::IndexList thrRemoved, thrAdded;  // also contain pp indices
-    const auto*                 threatPpBase = &featureTransformer.threatAndPpWeights[0];
-    IndexType                   pfStride     = FeatureTransformer::OutputDimensions;
-    ThreatFeatureSet::append_changed_indices(perspective, newKsq, target.dirtyThreats, thrRemoved,
-                                             thrAdded, threatPpBase, pfStride);
-    PairFeatureSet::append_changed_indices(perspective, newKsq, target.dirtyPawnPairs, thrRemoved,
-                                           thrAdded, threatPpBase, pfStride);
+    ThreatAndPpIndices thrRemoved, thrAdded;
+    const auto*        threatBase = featureTransformer.threatAndPpWeights.data();
+    const auto*        ppBase     = pp_weights(featureTransformer, psqBlock, perspective, newKsq);
+    IndexType          pfStride   = FeatureTransformer::OutputDimensions;
+    ThreatFeatureSet::append_changed_indices(perspective, newKsq, target.dirtyThreats,
+                                             thrRemoved.indices, thrAdded.indices, threatBase,
+                                             pfStride);
+    thrRemoved.mark_threat_end();
+    thrAdded.mark_threat_end();
+    PairFeatureSet::append_changed_indices(perspective, newKsq, target.dirtyPawnPairs,
+                                           thrRemoved.indices, thrAdded.indices, ppBase, pfStride);
 
     const auto& fromAcc = computed.accumulation[perspective];
     auto&       toAcc   = target.accumulation[perspective];
@@ -974,7 +1035,7 @@ void update_accumulator_hybrid(Color                     perspective,
         // ... then we adjust
         // The old entry's removed psq features have to be added back, its added ones removed
         acc = apply_combined_features(j, acc, oldAdd, thrRemoved, oldRemove, thrAdded,
-                                      featureTransformer, psqWeights);
+                                      featureTransformer, psqWeights, ppBase);
 
         store_tile(j, toAcc.data(), acc);
     }
@@ -1005,9 +1066,11 @@ void update_accumulator_refresh_cache(Color                     perspective,
     entry.pieceBB = pos.pieces();
     entry.pieces  = pos.piece_array();
 
-    ThreatFeatureSet::IndexList active;
-    ThreatFeatureSet::append_active_indices(perspective, pos, active);
-    PairFeatureSet::append_active_indices(perspective, pos, active);
+    ThreatAndPpIndices active;
+    ThreatFeatureSet::append_active_indices(perspective, pos, active.indices);
+    active.mark_threat_end();
+    PairFeatureSet::append_active_indices(perspective, pos, active.indices);
+    const auto* ppBase = pp_weights(featureTransformer, psqBlock, perspective, ksq);
 
     accumulator.computed[perspective] = true;
 
@@ -1019,7 +1082,7 @@ void update_accumulator_refresh_cache(Color                     perspective,
 
         store_tile(j, &entry.accumulation[0], acc);
 
-        acc = apply_threat_features<+1>(j, acc, active, featureTransformer);
+        acc = apply_threat_features<+1>(j, acc, active, featureTransformer, ppBase);
 
         store_tile(j, accumulator.accumulation[perspective].data(), acc);
     }
