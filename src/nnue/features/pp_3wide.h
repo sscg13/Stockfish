@@ -31,10 +31,21 @@ namespace Stockfish::Eval::NNUE::Features {
 
 class PP_3Wide {
    public:
-    static constexpr u32 HashValue = 0x5c80fa69u;
+    static constexpr u32 HashValue = 0x46f5cb78u;
 
-    static constexpr IndexType PawnIds    = COLOR_NB * 48;
-    static constexpr IndexType Dimensions = PawnIds * (PawnIds - 1) / 2;
+    static constexpr IndexType PawnIds           = COLOR_NB * 48;
+    static constexpr IndexType FeaturesPerBucket = 23 * (PawnIds - 2) + 1;
+    static constexpr IndexType KingBuckets       = 2;
+    static constexpr IndexType MaterialBlocks    = 3;
+    static constexpr IndexType Dimensions        = FeaturesPerBucket * KingBuckets * MaterialBlocks;
+
+    static constexpr IndexType king_bucket(Color perspective, Square ksq) {
+        return relative_rank(perspective, ksq) != RANK_1;
+    }
+
+    static constexpr IndexType bucket_offset(int materialBlock, Color perspective, Square ksq) {
+        return (materialBlock * KingBuckets + king_bucket(perspective, ksq)) * FeaturesPerBucket;
+    }
 
     // Pawn pair feature indices are concatenated to threats, so this must equal ThreatFeatureSet::Dimensions;
     // see nnue_feature_transformer.h
@@ -42,6 +53,7 @@ class PP_3Wide {
     using IndexList                      = ValueList<u16, 256>;
     using DiffType                       = DirtyPawnPairs;
 
+    // Indices are local to the selected pawn-pair bucket.
     static IndexType make_index(
       Color perspective, Color color, Square from, Square to, Color pairedColor, Square ksq);
 
@@ -55,15 +67,16 @@ class PP_3Wide {
                                        const ThreatWeightType* prefetchBase   = nullptr,
                                        IndexType               prefetchStride = 0);
 
-    static void append_changed_indices_both(Square                  white_ksq,
-                                            Square                  black_ksq,
-                                            const DiffType&         diff,
-                                            IndexList&              white_removed,
-                                            IndexList&              white_added,
-                                            IndexList&              black_removed,
-                                            IndexList&              black_added,
-                                            const ThreatWeightType* prefetchBase   = nullptr,
-                                            IndexType               prefetchStride = 0);
+    static void
+    append_changed_indices_both(Square          white_ksq,
+                                Square          black_ksq,
+                                const DiffType& diff,
+                                IndexList&      white_removed,
+                                IndexList&      white_added,
+                                IndexList&      black_removed,
+                                IndexList&      black_added,
+                                const ThreatWeightType* const (&prefetchBases)[COLOR_NB],
+                                IndexType prefetchStride);
 };
 
 }  // namespace Stockfish::Eval::NNUE::Features
