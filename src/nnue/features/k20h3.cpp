@@ -16,9 +16,9 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-//Definition of input features K32H3 of NNUE evaluation function
+// Definition of the K20H3 NNUE input features.
 
-#include "k32h3.h"
+#include "k20h3.h"
 
 #include <array>
 
@@ -33,7 +33,7 @@
 namespace Stockfish::Eval::NNUE::Features {
 
 #if defined(USE_AVX512ICL)
-void K32H3::write_indices(const std::array<Piece, SQUARE_NB>& oldPieces,
+void K20H3::write_indices(const std::array<Piece, SQUARE_NB>& oldPieces,
                           const std::array<Piece, SQUARE_NB>& newPieces,
                           Bitboard                            removedBB,
                           Bitboard                            addedBB,
@@ -83,7 +83,7 @@ void K32H3::write_indices(const std::array<Piece, SQUARE_NB>& oldPieces,
 // Index of a feature within its block for a given king position and another piece on
 // some square
 
-IndexType K32H3::make_index(Color perspective, Square s, Piece pc, Square ksq) {
+IndexType K20H3::make_index(Color perspective, Square s, Piece pc, Square ksq) {
     alignas(64) static constexpr auto offsets = [] {
         std::array<std::array<u16, PIECE_NB>, COLOR_NB * SQUARE_NB> table{};
         for (int c = 0; c < COLOR_NB; ++c)
@@ -104,7 +104,7 @@ IndexType K32H3::make_index(Color perspective, Square s, Piece pc, Square ksq) {
 
 // Get a list of indices for recently changed features
 
-void K32H3::append_changed_indices(
+void K20H3::append_changed_indices(
   Color perspective, Square ksq, const DiffType& diff, IndexList& removed, IndexList& added) {
     removed.push_back(make_index(perspective, diff.from, diff.pc, ksq));
     if (diff.to != SQ_NONE)
@@ -117,15 +117,15 @@ void K32H3::append_changed_indices(
         added.push_back(make_index(perspective, diff.add_sq, diff.add_pc, ksq));
 }
 
-int K32H3::block(const Position& pos, Color perspective) {
+int K20H3::block(const Position& pos, Color perspective) {
     return pos.count<QUEEN>(~perspective) ? 2 : bool(pos.pieces(ROOK, QUEEN));
 }
 
-K32H3::BlockState K32H3::block_state(const Position& pos) {
+K20H3::BlockState K20H3::block_state(const Position& pos) {
     return {u8(block(pos, WHITE)), u8(block(pos, BLACK))};
 }
 
-bool K32H3::requires_refresh(const DiffType& diff,
+bool K20H3::requires_refresh(const DiffType& diff,
                              Color           perspective,
                              int             blockBefore,
                              int             blockAfter) {

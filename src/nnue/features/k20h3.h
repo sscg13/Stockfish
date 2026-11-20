@@ -16,10 +16,10 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-//Definition of input features K32H3 of NNUE evaluation function
+// Definition of the K20H3 NNUE input features.
 
-#ifndef NNUE_FEATURES_K32H3_H_INCLUDED
-#define NNUE_FEATURES_K32H3_H_INCLUDED
+#ifndef NNUE_FEATURES_K20H3_H_INCLUDED
+#define NNUE_FEATURES_K20H3_H_INCLUDED
 
 #include <array>
 
@@ -33,9 +33,10 @@ class Position;
 
 namespace Stockfish::Eval::NNUE::Features {
 
-// Feature K32H3: Combination of the position of own king (32 buckets), a piece-square block (3 states)
-// and piece-square positions. Position mirrored such that king is always on e..h files.
-class K32H3 {
+// The perspective's king is oriented to the e..h files. Ranks 1..4 use individual
+// squares, and ranks 5..8 use 2x2 regions. Each of the three material blocks has
+// 20 king buckets.
+class K20H3 {
 
     // Unique number for each piece type on each square
     enum {
@@ -64,13 +65,14 @@ class K32H3 {
 
    public:
     // Hash value embedded in the evaluation file
-    static constexpr u32 HashValue = 0xab005cefu;
+    static constexpr u32 HashValue = 0x56feaff6u;
 
     // Piece-square block of a perspective, in order of increasing heavy material:
     //   0: no rook or queen on the board,
     //   1: some rook or queen on the board, but the opponent has no queen,
     //   2: the opponent has a queen.
     static constexpr int NumBlocks = 3;
+    static constexpr int NumKingBuckets = 20;
 
     // Block of each perspective
     using BlockState = std::array<u8, COLOR_NB>;
@@ -78,28 +80,28 @@ class K32H3 {
     static int        block(const Position& pos, Color perspective);
     static BlockState block_state(const Position& pos);
 
-    // Number of features per block (22,528 piece-squares)
+    // Number of features per block (14,080 piece-squares)
     static constexpr IndexType BlockDimensions =
-      static_cast<IndexType>(SQUARE_NB / 2) * static_cast<IndexType>(PS_NB);
+      static_cast<IndexType>(NumKingBuckets) * static_cast<IndexType>(PS_NB);
 
     static constexpr IndexType block_offset(int block) {
         return IndexType(block) * BlockDimensions;
     }
 
-    // Number of feature dimensions (67,584 piece-squares)
+    // Number of feature dimensions (42,240 piece-squares)
     static constexpr IndexType Dimensions = NumBlocks * BlockDimensions;
 
 #define B(v) (v * PS_NB)
     // clang-format off
     static constexpr IndexType KingBuckets[SQUARE_NB] = {
-        B(28), B(29), B(30), B(31), B(31), B(30), B(29), B(28),
-        B(24), B(25), B(26), B(27), B(27), B(26), B(25), B(24),
-        B(20), B(21), B(22), B(23), B(23), B(22), B(21), B(20),
         B(16), B(17), B(18), B(19), B(19), B(18), B(17), B(16),
         B(12), B(13), B(14), B(15), B(15), B(14), B(13), B(12),
         B( 8), B( 9), B(10), B(11), B(11), B(10), B( 9), B( 8),
         B( 4), B( 5), B( 6), B( 7), B( 7), B( 6), B( 5), B( 4),
-        B( 0), B( 1), B( 2), B( 3), B( 3), B( 2), B( 1), B( 0),
+        B( 2), B( 2), B( 3), B( 3), B( 3), B( 3), B( 2), B( 2),
+        B( 2), B( 2), B( 3), B( 3), B( 3), B( 3), B( 2), B( 2),
+        B( 0), B( 0), B( 1), B( 1), B( 1), B( 1), B( 0), B( 0),
+        B( 0), B( 0), B( 1), B( 1), B( 1), B( 1), B( 0), B( 0),
     };
     // clang-format on
 #undef B
@@ -137,4 +139,4 @@ class K32H3 {
 
 }  // namespace Stockfish::Eval::NNUE::Features
 
-#endif  // #ifndef NNUE_FEATURES_K32H3_H_INCLUDED
+#endif  // #ifndef NNUE_FEATURES_K20H3_H_INCLUDED
