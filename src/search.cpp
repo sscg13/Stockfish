@@ -28,7 +28,7 @@
 #include <cstdlib>
 #include <initializer_list>
 #include <iostream>
-#include <list>
+#include <memory>
 #include <ratio>
 #include <string>
 #include <utility>
@@ -61,7 +61,7 @@ namespace TB = Tablebases;
 
 void syzygy_extend_pv(const OptionsMap&            options,
                       const Search::LimitsType&    limits,
-                      Stockfish::Position&         pos,
+                      Stockfish::Position&         root,
                       Stockfish::Search::RootMove& rootMove,
                       Value&                       v,
                       const usize                  multiPV);
@@ -93,13 +93,12 @@ const std::array<int, MAX_MOVES> reductions = [] {
 // optimized for require verifications at longer time controls.
 
 int correction_value(const Worker& w, const Position& pos, const Stack* const ss) {
-    const Color us     = pos.side_to_move();
     const auto  m      = (ss - 1)->currentMove;
     const auto& shared = w.sharedHistory;
-    const int   pcv    = shared.pawn_correction_entry(pos)[us].pawn;
-    const int   micv   = shared.minor_piece_correction_entry(pos)[us].minor;
-    const int   wnpcv  = shared.nonpawn_correction_entry<WHITE>(pos)[us].nonPawnWhite;
-    const int   bnpcv  = shared.nonpawn_correction_entry<BLACK>(pos)[us].nonPawnBlack;
+    const int   pcv    = shared.pawn_correction_entry(pos).pawn;
+    const int   micv   = shared.minor_piece_correction_entry(pos).minor;
+    const int   wnpcv  = shared.nonpawn_correction_entry<WHITE>(pos).nonPawnWhite;
+    const int   bnpcv  = shared.nonpawn_correction_entry<BLACK>(pos).nonPawnBlack;
     const int   cntcv =
       m.is_ok()
           ? 7885
@@ -121,16 +120,15 @@ void update_correction_history(const Position& pos,
                                Stack* const    ss,
                                Search::Worker& workerThread,
                                const int       bonus) {
-    const Move  m  = (ss - 1)->currentMove;
-    const Color us = pos.side_to_move();
+    const Move m = (ss - 1)->currentMove;
 
     constexpr int nonPawnWeight = 186;
     auto&         shared        = workerThread.sharedHistory;
 
-    shared.pawn_correction_entry(pos)[us].pawn << bonus;
-    shared.minor_piece_correction_entry(pos)[us].minor << bonus * 150 / 128;
-    shared.nonpawn_correction_entry<WHITE>(pos)[us].nonPawnWhite << bonus * nonPawnWeight / 128;
-    shared.nonpawn_correction_entry<BLACK>(pos)[us].nonPawnBlack << bonus * nonPawnWeight / 128;
+    shared.pawn_correction_entry(pos).pawn << bonus;
+    shared.minor_piece_correction_entry(pos).minor << bonus * 150 / 128;
+    shared.nonpawn_correction_entry<WHITE>(pos).nonPawnWhite << bonus * nonPawnWeight / 128;
+    shared.nonpawn_correction_entry<BLACK>(pos).nonPawnBlack << bonus * nonPawnWeight / 128;
 
     if (m.is_ok())
     {
@@ -164,7 +162,7 @@ void update_all_stats(const Position& pos,
 bool is_shuffling(Move move, Stack* const ss, const Position& pos) {
     if (pos.capture_stage(move) || pos.rule50_count() < 10)
         return false;
-    if (pos.state()->pliesFromNull < 6 || ss->ply < 20)
+    if (pos.plies_from_null() < 6 || ss->ply < 20)
         return false;
     return move.from_sq() == (ss - 2)->currentMove.to_sq()
         && (ss - 2)->currentMove.from_sq() == (ss - 4)->currentMove.to_sq();
@@ -288,9 +286,7 @@ bool Search::Worker::iterative_deepening() {
     Depth       lastBestMoveDepth = 0;
     Value       lastBestMoveScore = -VALUE_INFINITE;
 
-    Value  alpha, beta;
-    Value  bestValue     = -VALUE_INFINITE;
-    Color  us            = rootPos.side_to_move();
+    Value  alpha, beta, bestValue;
     double timeReduction = 1, totBestMoveChanges = 0;
     int    delta, iterIdx                        = 0;
 
@@ -333,6 +329,7 @@ bool Search::Worker::iterative_deepening() {
 
     int  searchAgainCounter = 0;
     int  failHighRecovery   = 0;
+    u64  totalEffort        = 0;
     bool uciPvSent          = false;
 
     lowPlyHistory.fill(102);
@@ -392,10 +389,6 @@ bool Search::Worker::iterative_deepening() {
 
             seekMate = rootMoves[pvIdx].previousScore != -VALUE_INFINITE
                     && std::abs(rootMoves[pvIdx].previousScore) >= seekMateThreshold;
-
-            // Adjust optimism based on root move's averageScore
-            optimism[us]  = 456 * avg / (std::abs(avg) + 85);
-            optimism[~us] = -optimism[us];
 
             // Start with a small aspiration window and, in the case of a fail
             // high/low, enlarge the window progressively.
@@ -518,6 +511,9 @@ bool Search::Worker::iterative_deepening() {
                 uciPvSent = (pvIdx + 1 == multiPV);
             }
 
+            if (mainThread && !pvIdx)
+                totalEffort = u64(nodes);
+
             if (threads.stop)
                 break;
         }
@@ -581,11 +577,12 @@ bool Search::Worker::iterative_deepening() {
         // Do we have time for the next iteration? Can we stop searching now?
         if (limits.use_time_management() && !threads.stop && !mainThread->stopOnPonderhit)
         {
-            u64 nodesEffort = rootMoves[0].effort * 100000 / std::max(u64(1), u64(nodes));
+            u64 nodesEffort = rootMoves[0].effort * 100000 / std::max(u64(1), totalEffort);
 
-            double fallingEval = (11.48 + 2.30 * (mainThread->bestPreviousAverageScore - bestValue)
-                                  + 1.1 * (mainThread->iterValue[iterIdx] - bestValue))
-                               / 100.0;
+            double fallingEval =
+              (11.48 + 2.30 * (mainThread->bestPreviousAverageScore - rootMoves[0].score)
+               + 1.1 * (mainThread->iterValue[iterIdx] - rootMoves[0].score))
+              / 100.0;
             fallingEval = std::clamp(fallingEval, 0.576, 1.728);
 
             // If the bestMove is stable over several iterations, reduce time accordingly
@@ -634,7 +631,7 @@ bool Search::Worker::iterative_deepening() {
                 threads.increaseDepth = mainThread->ponder || elapsedTime <= totalTime * 0.50;
         }
 
-        mainThread->iterValue[iterIdx] = bestValue;
+        mainThread->iterValue[iterIdx] = rootMoves[0].score;
         iterIdx                        = (iterIdx + 1) & 3;
     }
 
@@ -649,7 +646,10 @@ bool Search::Worker::iterative_deepening() {
         Move pick = skill.best ? skill.best : skill.pick_best(rootMoves, multiPV);
         if (pick != rootMoves[0].pv[0])
         {
+            const auto bestScore = rootMoves[0].score;
             std::swap(rootMoves[0], *std::find(rootMoves.begin(), rootMoves.end(), pick));
+            if (is_loss(rootMoves[0].score) && rootMoves[0].score < bestScore)
+                rootMoves[0].inexactLower = true;
             uciPvSent = false;
         }
     }
@@ -657,12 +657,8 @@ bool Search::Worker::iterative_deepening() {
     return uciPvSent;
 }
 
-void Search::Worker::do_move(Position&    pos,
-                             const Move   move,
-                             StateInfo&   st,
-                             const bool   givesCheck,
-                             const bool   capture,
-                             Stack* const ss) {
+void Search::Worker::do_move(
+  Position& pos, const Move move, const bool givesCheck, const bool capture, Stack* const ss) {
     // prefetch_key() does not model castling, en passant or promotion exactly.
     // The correction-history prefetches also approximate castling and promotion.
     // For these rare moves the prefetches land on unused lines.
@@ -681,7 +677,7 @@ void Search::Worker::do_move(Position&    pos,
     ++nodes;
 
     Dirties& dirties = accumulatorStack.push(pos);
-    pos.do_move(move, st, givesCheck, dirties, &sharedHistory);
+    pos.do_move(move, givesCheck, dirties, &sharedHistory);
 
     if (ss != nullptr)
     {
@@ -694,8 +690,8 @@ void Search::Worker::do_move(Position&    pos,
     }
 }
 
-void Search::Worker::do_null_move(Position& pos, StateInfo& st, Stack* const ss) {
-    pos.do_null_move(st);
+void Search::Worker::do_null_move(Position& pos, Stack* const ss) {
+    pos.do_null_move();
     ss->currentMove                   = Move::null();
     ss->continuationHistory           = &continuationHistory[0][0][NO_PIECE][0];
     ss->continuationCorrectionHistory = &continuationCorrectionHistory[NO_PIECE][0];
@@ -765,8 +761,7 @@ Value Search::Worker::search(
     assert(0 < depth && depth < MAX_PLY);
     assert(!(PvNode && cutNode));
 
-    PVMoves   pv;
-    StateInfo st;
+    PVMoves pv;
 
     Key   posKey;
     Move  move, excludedMove, bestMove;
@@ -917,7 +912,7 @@ Value Search::Worker::search(
                 if (depth >= 7 && ttData.move && pos.legal(ttData.move)
                     && !is_decisive(ttData.value))
                 {
-                    pos.do_move(ttData.move, st);
+                    pos.do_move(ttData.move);
                     Key nextPosKey                             = pos.key();
                     auto [ttHitNext, ttDataNext, ttWriterNext] = tt.probe(nextPosKey);
                     pos.undo_move(ttData.move);
@@ -1042,9 +1037,10 @@ Value Search::Worker::search(
 
         // Null move dynamic reduction based on depth
         // Odd threads reduce one ply less
-        Depth R = 7 + depth / 3 + std::max((ss->staticEval - beta) / 256, 0) - int(threadIdx & 1);
+        Depth R = 7 + depth / 3 + std::clamp((ss->staticEval - beta) / 256, 0, ss->ply / 2)
+                - int(threadIdx & 1);
         R -= seekMate * R / 2;
-        do_null_move(pos, st, ss);
+        do_null_move(pos, ss);
 
         Value nullValue = -search<NonPV>(pos, ss + 1, -beta, -beta + 1, depth - R, false);
 
@@ -1107,7 +1103,7 @@ Value Search::Worker::search(
             capture = pos.capture_stage(move);
             assert(capture);
 
-            do_move(pos, move, st, pos.gives_check(move), capture, ss);
+            do_move(pos, move, pos.gives_check(move), capture, ss);
             // Perform a preliminary qsearch to verify that the move holds
             value = -qsearch<NonPV>(pos, ss + 1, -probCutBeta, -probCutBeta + 1);
 
@@ -1247,8 +1243,7 @@ moves_loop:  // When in check, search starts here
                 // (*Scaler): Generally, more frequent futility pruning scales well
                 if (!ss->inCheck && lmrDepth < 12 && futilityValue <= alpha)
                 {
-                    if (bestValue <= futilityValue && !is_decisive(bestValue)
-                        && !is_win(futilityValue))
+                    if (bestValue <= futilityValue && !is_win(futilityValue))
                         bestValue = futilityValue;
                     continue;
                 }
@@ -1335,7 +1330,7 @@ moves_loop:  // When in check, search starts here
         u64 nodeCount = rootNode ? u64(nodes) : 0;
 
         // Step 17. Make the move
-        do_move(pos, move, st, givesCheck, capture, ss);
+        do_move(pos, move, givesCheck, capture, ss);
 
         // Add extension to new depth
         newDepth += extension;
@@ -1697,8 +1692,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
             return alpha;
     }
 
-    PVMoves   pv;
-    StateInfo st;
+    PVMoves pv;
 
     Key   posKey;
     Move  move, bestMove;
@@ -1849,7 +1843,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         }
 
         // Step 7. Make and search the move
-        do_move(pos, move, st, givesCheck, capture, ss);
+        do_move(pos, move, givesCheck, capture, ss);
 
         value = -qsearch<nodeType>(pos, ss + 1, -beta, -alpha);
         undo_move(pos, move);
@@ -1927,8 +1921,7 @@ TimePoint Search::Worker::elapsed() const {
 // Evaluate the current position of the game tree, from the point of view of
 // the side to move.
 Value Search::Worker::evaluate(const Position& pos) {
-    return Eval::evaluate(network[numaAccessToken], pos, accumulatorStack, refreshTable,
-                          optimism[pos.side_to_move()]);
+    return Eval::evaluate(network[numaAccessToken], pos, accumulatorStack, refreshTable);
 }
 
 namespace {
@@ -2161,7 +2154,7 @@ void SearchManager::check_time(Search::Worker& worker) {
 // possible continuation (but not a proven mating line).
 void syzygy_extend_pv(const OptionsMap&         options,
                       const Search::LimitsType& limits,
-                      Position&                 pos,
+                      Position&                 root,
                       RootMove&                 rootMove,
                       Value&                    v,
                       const usize               multiPV) {
@@ -2182,11 +2175,15 @@ void syzygy_extend_pv(const OptionsMap&         options,
     if (time_abort())
         return;
 
-    std::list<StateInfo> sts;
+    // Walk the PV on a copy that is never undone: the PV may exceed the
+    // MAX_HIST states a Position keeps.
+    std::unique_ptr<Position> walker = std::make_unique<Position>();
+    Position&                 pos    = *walker;
+    pos.set(root.fen(), root.is_chess960());
+    pos.copy_state_infos(root);
 
     // Step 0, do the rootMove, no correction allowed, as needed for MultiPV in TB
-    auto& stRoot = sts.emplace_back();
-    pos.do_move(rootMove.pv[0], stRoot);
+    pos.do_move(rootMove.pv[0]);
     int ply = 1;
 
     // Step 1, walk the PV to the last position in TB with correct decisive score
@@ -2206,8 +2203,7 @@ void syzygy_extend_pv(const OptionsMap&         options,
 
         ply++;
 
-        auto& st = sts.emplace_back();
-        pos.do_move(pvMove, st);
+        pos.do_move(pvMove);
 
         // Do not allow for repetitions or drawing moves along the PV in TB regime
         if (config.rootInTB && ((rule50 && pos.is_draw(ply)) || pos.is_repetition(ply)))
@@ -2237,9 +2233,8 @@ void syzygy_extend_pv(const OptionsMap&         options,
         RootMoves legalMoves;
         for (const auto& m : MoveList<ALL>(pos))
         {
-            auto&     rm = legalMoves.emplace_back(m);
-            StateInfo tmpSI;
-            pos.do_move(m, tmpSI);
+            auto& rm = legalMoves.emplace_back(m);
+            pos.do_move(m);
             // Give a score of each move to break DTZ ties restricting opponent
             // mobility, but not giving the opponent a capture.
             for (const auto& mOpp : MoveList<ALL>(pos))
@@ -2268,8 +2263,7 @@ void syzygy_extend_pv(const OptionsMap&         options,
 
         Move& pvMove = legalMoves[0].pv[0];
         rootMove.pv.push_back(pvMove);
-        auto& st = sts.emplace_back();
-        pos.do_move(pvMove, st);
+        pos.do_move(pvMove);
     }
 
     // Finding a draw in this function is an exceptional case, that cannot happen when rule50 is false or
@@ -2284,10 +2278,6 @@ void syzygy_extend_pv(const OptionsMap&         options,
     // will figure it out (e.g. 1kq5/q2r4/5K2/8/8/8/8/7Q w - - 96 1 )
     if (pos.is_draw(0))
         v = VALUE_DRAW;
-
-    // Undo the PV moves
-    for (usize i = rootMove.pv.size(); i > 0; --i)
-        pos.undo_move(rootMove.pv[i - 1]);
 
     // Inform if we couldn't get a full extension in time
     if (time_abort())
@@ -2377,8 +2367,7 @@ bool RootMove::extract_ponder_from_tt(const TranspositionTable& tt, Position& po
 
     assert(pv.size() == 1 && pv[0] != Move::none());
 
-    StateInfo st;
-    pos.do_move(pv[0], st);
+    pos.do_move(pv[0]);
 
     if (!pos.is_draw(1))
     {
